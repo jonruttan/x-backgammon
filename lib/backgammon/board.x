@@ -25,7 +25,7 @@
 
 (import x/type/vector)
 (import x/type/dict)
-(import x/core/doors int+ int- int* int< int= obj-ref obj-set! str-make str->ptr ptr-set!
+(import x/core/doors int+ int- int* int< int= obj-ref obj-set! str-make str->ptr ptr-set! str-byte-len str-byte-ref str-byte-sub
   io-display-to-str)
 
 (def BAR 24)
@@ -297,8 +297,129 @@
 
 (def play-text (fn (_ pl) (steps-text (first pl))))
 
+; --- reading a play ------------------------------------------------------------
+;
+; A play is read the way it is written: moves apart by spaces, each the
+; places a checker goes through, "13/11", "24/18*/13", "bar/22", "6/off",
+; and "(N)" after one made N times.  Points are the mover's own.  The
+; moves are made on a copy of the position, a blot hit where a checker
+; ends its move or where a "*" marks it on the way, and the play is the
+; legal one that leaves the same position: so "24/18 18/13" and "24/13"
+; are read alike, and no order of the dice need be given.
+
+(def %blank? (fn (_ b) (if (int= b 32) #t (if (int= b 9) #t (int= b 10)))))
+
+; The words of S apart by spaces.
+(def %words
+  (fn (_ s)
+    (def n (str-byte-len s))
+    ((fn (self i start acc)
+       (match
+         ((int= i n) (List reverse (if (int< start i) (pair (str-byte-sub s start (int- i start)) acc) acc)))
+         ((%blank? (str-byte-ref s i))
+           (self (int+ i 1) (int+ i 1) (if (int< start i) (pair (str-byte-sub s start (int- i start)) acc) acc)))
+         (#t (self (int+ i 1) start acc))))
+     0 0 ())))
+
+; S cut at each byte B.
+(def %cut
+  (fn (_ s b)
+    (def n (str-byte-len s))
+    ((fn (self i start acc)
+       (match
+         ((int= i n) (List reverse (pair (str-byte-sub s start (int- i start)) acc)))
+         ((int= (str-byte-ref s i) b) (self (int+ i 1) (int+ i 1) (pair (str-byte-sub s start (int- i start)) acc)))
+         (#t (self (int+ i 1) start acc))))
+     0 0 ())))
+
+; The number S spells in decimal, or () when it is not one.
+(def %number
+  (fn (_ s)
+    (def n (str-byte-len s))
+    (if (int= n 0) ()
+      ((fn (self i v)
+         (if (int= i n) v
+           ((fn (_ d) (if (if (int< d 0) #t (int< 9 d)) () (self (int+ i 1) (int+ (int* v 10) d))))
+            (int- (str-byte-ref s i) 48))))
+       0 0))))
+
+; A place as written, "bar", "off" or a point, as (INDEX . HIT): BAR, -1
+; for off, or the point's index; HIT #t for a trailing "*".  () when not
+; a place.
+(def %place
+  (fn (_ s)
+    (def n (str-byte-len s))
+    (def hit (if (int< 0 n) (int= (str-byte-ref s (int- n 1)) 42) #f))
+    (def w (if hit (str-byte-sub s 0 (int- n 1)) s))
+    (match
+      ((str=? w "bar") (pair BAR hit))
+      ((str=? w "off") (pair -1 hit))
+      (#t ((fn (_ v) (if (if (null? v) #t (if (int< v 1) #t (int< 24 v))) () (pair (int- v 1) hit))) (%number w))))))
+
+; A word as (COUNT . PLACES), or ().
+(def %move-word
+  (fn (_ s)
+    (def n (str-byte-len s))
+    (def open
+      ((fn (self i) (if (int< i 0) -1 (if (int= (str-byte-ref s i) 40) i (self (int- i 1))))) (int- n 1)))
+    (def count
+      (if (if (int< 0 open) (int= (str-byte-ref s (int- n 1)) 41) #f)
+        (%number (str-byte-sub s (int+ open 1) (int- n (int+ open 2))))
+        1))
+    (def body (if (if (int< 0 open) (int= (str-byte-ref s (int- n 1)) 41) #f) (str-byte-sub s 0 open) s))
+    (def places (List map %place (%cut body 47)))
+    (if (if (null? count) #t (List any? (fn (_ x) (null? x)) places)) ()
+      (if (int< (List length places) 2) () (pair count places)))))
+
+; The other side's blot at the mover's index I sent to its bar: #f when
+; it holds the point.
+(def %hit!
+  (fn (_ p i)
+    ((fn (_ o)
+       (match
+         ((int= (pos-opp p o) 0) #t)
+         ((int= (pos-opp p o) 1) (do (%opp! p o 0) (%opp! p BAR (int+ (pos-opp p BAR) 1)) #t))
+         (#t #f)))
+     (int- 23 i))))
+
+; One checker moved through PLACES in P itself: #f when it cannot be.
+(def %move!
+  (fn (_ p places)
+    (def from (first (first places)))
+    (def to (first (List last places)))
+    (def between (List init (rest places)))
+    (match
+      ((int< from 0) #f)
+      ((int< (pos-me p from) 1) #f)
+      ((int= to BAR) #f)
+      ((not (List all? (fn (_ pl) (if (int< (first pl) 0) #f (if (int= (first pl) BAR) #f (if (rest pl) (%hit! p (first pl)) #t)))) between)) #f)
+      ((int< to 0) (do (%me! p from (int- (pos-me p from) 1)) #t))
+      ((not (%hit! p to)) #f)
+      (#t (do (%me! p from (int- (pos-me p from) 1)) (%me! p to (int+ (pos-me p to) 1)) #t)))))
+
+; The legal play of D1 D2 from P that TEXT writes, or a string saying
+; why there is none.
+(def play-find
+  (fn (_ p d1 d2 text)
+    (def ps (plays p d1 d2))
+    (def words (%words text))
+    (def moves (List map %move-word words))
+    (match
+      ((if (null? words) #t (if (int= (List length words) 2) (if (str=? (first words) "no") (str=? (%2nd words) "move") #f) #f))
+        (if (null? (first (first ps))) (first ps) "there is a move to play"))
+      ((List any? (fn (_ x) (null? x)) moves) "a move is written 24/18, 13/11(2), bar/22, 6/off or 24/18*/13")
+      (#t
+        ((fn (_ q)
+           (if (not (List all? (fn (_ m) (List all? (fn (_ k) (%move! q (rest m))) (List range 0 (first m)))) moves))
+             "those checkers cannot move that way"
+             ((fn (_ k)
+                ((fn (_ found) (if (null? found) "that is not a legal play of the roll" found))
+                 (List find (fn (_ pl) (str=? (pos-key (rest pl)) k)) ps)))
+              (pos-key q))))
+         (pos-copy p))))))
+
 (provide backgammon/board
   BAR CHECKERS WHITE BLACK
   pos-me pos-opp pos-turn pos-copy pos-make pos-start pos-swap
   pos-me-off pos-opp-off pos-me-pips pos-opp-pips pos-over? pos-key
-  step-die plays rolls perft steps-text play-text)
+  step-die plays rolls perft steps-text play-text play-find)
