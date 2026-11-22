@@ -1,21 +1,72 @@
 # x-backgammon
 
-Backgammon on x-lang.  This is the start: the position, the legal plays
-of a roll, the board as text, and a count of plays over turns that
-checks the move generator as perft checks a chess engine's.
+Backgammon on x-lang: a game against the engine a line at a time, the
+board as text, the legal plays of a roll, and a count of plays over
+turns that checks the move generator as perft checks a chess engine's.
 
 ## Run
 
 ```sh
+x -l backgammon -- play
+x -l backgammon -- play --side black --seed 7
 x -l backgammon -- --board
 x -l backgammon -- --roll 31
 x -l backgammon -- --perft 1
 ```
 
+`play` is a game against the engine; `--side` is the side you play,
+white (the default), black, both, or none to watch the engine play
+itself.  The dice are drawn from a seed, printed at the start when
+`--seed N` does not give one, so a game can be played again.
 `--board` prints the starting board.  `--roll DD` prints every legal
 play of the roll from the start, one a line, and how many on standard
 error.  `--perft N` counts the plays over N turns, each of the 21 rolls
 once a turn.
+
+## Playing
+
+Each side rolls one die to start; the higher moves first and plays
+both.  After that the dice are rolled for each turn.  The board is
+shown before each play of yours, with your roll:
+
+```
+White to play 6-5> 24/13
+White plays 24/13.
+Black rolls 3-1.
+Black plays 8/5 6/5.
+```
+
+A play is typed the way it is written (below); points are counted from
+your own home board.  A checker's moves can be typed whole or a die at
+a time, `24/13` or `24/18 18/13`, and a blot where a move ends is hit
+without a `*`.  A roll with only one legal play is played for you.
+Anything else is a command:
+
+    board          show the board
+    hint           the engine's best plays of your roll, with how far
+                   each falls behind the best
+    moves          every legal play of your roll
+    pips           both pip counts
+    dice DD        set your dice by hand, for a game on a real board
+    undo           take back your last play
+    new            a new game
+    white, black   play that side against the engine
+    both, none     play both sides, or watch the engine play both
+    help, quit
+
+A game won with the loser having borne off none is a gammon, 2 points;
+with a loser's checker also still on the bar or in the winner's home
+board, a backgammon, 3 points.  There is no doubling cube yet.
+
+## The engine
+
+The engine looks one play ahead: of a roll's plays it takes the one
+whose position scores best, the other side to roll.  The score is
+counted in pips.  Once the sides have passed each other it is the pip
+counts' difference; before that it adds what the points held are worth
+(the home board's and the bar point most), the longest run of them,
+checkers on the bar, and the risk to each blot: the rolls out of 36
+that hit it, times the pips a hit costs.
 
 ## The rules played
 
