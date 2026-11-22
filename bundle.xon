@@ -1,0 +1,13 @@
+; bundle.xon -- what this bundle is.
+
+(name "backgammon")
+
+; Self-contained: this bundle depends on nothing but the platform.
+;
+; Helium, plus exactly the libraries this bundle imports and nothing
+; ambient.
+(dialect he)
+
+(requires-release "v0.60.0")
+
+(entry run)
