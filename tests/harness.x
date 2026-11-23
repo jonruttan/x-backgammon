@@ -47,3 +47,36 @@
 
 ; #t when NEEDLE is in TEXT.
 (def spec-has? (fn (_ needle text) (not (null? (Str8 index-of needle text)))))
+
+; --- the board on a terminal ----------------------------------------------------
+;
+; ROWS of SCREEN as text, right-trimmed and joined by newlines; a board
+; interface for HUMAN at the start with white to play D1 D2; ST drawn on
+; SCREEN, the heap collected first, as the loop does; KEYS pressed; and
+; a left click at SCREEN ROW and COL, counted from 0.
+(import x/sys/gc)
+(import x/tui/screen)
+(import x/tui/style)
+(import backgammon/board play-next play-after play-done step-die)
+(import backgammon/game game-at)
+(import backgammon/tui tui-make tui-game tui-game! tui-quit? tui-message tui-last tui-done tui-score
+  tui-engine-to-move? tui-auto-play! tui-key! tui-draw!)
+
+(def spec-rows
+  (fn (_ screen rows)
+    (Str8 join "\n" (List map (fn (_ i) (Str8 trim-right (Screen row-text screen i))) rows))))
+
+(def spec-tui
+  (fn (_ human d1 d2)
+    (def st (tui-make (Random sw 1) human))
+    (tui-game! st (game-at (pos-start) (list d1 d2) (Random sw 1)))))
+
+(def spec-draw! (fn (_ st screen) (Heap collect) (tui-draw! st screen)))
+
+(def spec-keys! (fn (_ st keys) (List for-each (fn (_ k) (tui-key! st k)) keys)))
+
+(def spec-click! (fn (_ st row col) (tui-key! st (list (lit mouse) 0 (+ col 1) (+ row 1) #t))))
+
+; The next steps of D1 D2 from P after DONE, as (FROM TO) indices.
+(def spec-next
+  (fn (_ p d1 d2 done) (List map (fn (_ s) (list (first s) (first (rest s)))) (play-next p d1 d2 done))))

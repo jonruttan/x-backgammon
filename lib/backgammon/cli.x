@@ -18,14 +18,16 @@
 (import backgammon/board pos-start plays play-text perft)
 (import backgammon/show board-text)
 (import backgammon/play play-run side-word)
+(import backgammon/app app-run)
 
 (def backgammon-version "0.1.0")
 
 (def backgammon-options
   (Opts declare "x -l backgammon --" "[OPTIONS] [play]"
-    "Backgammon against the engine, a line at a time; the board, the legal\nplays of a roll, and counts of them."
+    "Backgammon against the engine: on the board, filling the terminal, or a\nline at a time; the legal plays of a roll, and counts of them."
     (list (Opts arg "-s" "--side" "SIDE" "The side you play: white (the default), black, both or none")
           (Opts arg "-S" "--seed" "N" "Roll the dice from seed N; the seed is printed when none is given")
+          (Opts flag "-L" "--line" "Play a line at a time, not on the board")
           (Opts flag "-b" "--board" "Print the starting board")
           (Opts arg "-r" "--roll" "DD" "Print every legal play of the roll DD (31, 66) from the start")
           (Opts arg "-p" "--perft" "N" "Count the plays over N turns from the start, each of the 21 rolls a turn")
@@ -116,7 +118,9 @@
             ; the launcher parks the caller's stdin on fd 3 while its boot
             ; stream holds fd 0; it is taken back, as x-chess and x-grep do
             (guard (e ()) (do (Sys dup2 3 0) (Sys close 3)))
-            (play-run (%io (if (Term tty? 0) (Sys isatty 1) #f)) (Random sw seed) side))))))
+            ((fn (_ tty rnd)
+               (if (if tty (not (Opts on? opts "-L")) #f) (app-run rnd side) (play-run (%io tty) rnd side)))
+             (if (Term tty? 0) (Sys isatty 1) #f) (Random sw seed)))))))
 
 ; ARGS, the command line after the launcher's options: the exit status.
 (def backgammon-main
