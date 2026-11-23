@@ -19,6 +19,9 @@
 (import backgammon/show board-text)
 (import backgammon/play play-run side-word)
 (import backgammon/app app-run)
+(import backgammon/window window-run)
+(import x/sys/sdl)
+(import x/sys/web)
 
 (def backgammon-version "0.1.0")
 
@@ -28,6 +31,9 @@
     (list (Opts arg "-s" "--side" "SIDE" "The side you play: white (the default), black, both or none")
           (Opts arg "-S" "--seed" "N" "Roll the dice from seed N; the seed is printed when none is given")
           (Opts flag "-L" "--line" "Play a line at a time, not on the board")
+          (Opts flag "-w" "--window" "Play in a window, checkers clicked or dragged, the dice heard")
+          (Opts flag "-W" "--web" "Play in a browser tab, its address printed")
+          (Opts arg "-l" "--listen" "ADDRESS" "The address --web listens on (127.0.0.1)")
           (Opts flag "-b" "--board" "Print the starting board")
           (Opts arg "-r" "--roll" "DD" "Print every legal play of the roll DD (31, 66) from the start")
           (Opts arg "-p" "--perft" "N" "Count the plays over N turns from the start, each of the 21 rolls a turn")
@@ -119,8 +125,25 @@
             ; stream holds fd 0; it is taken back, as x-chess and x-grep do
             (guard (e ()) (do (Sys dup2 3 0) (Sys close 3)))
             ((fn (_ tty rnd)
-               (if (if tty (not (Opts on? opts "-L")) #f) (app-run rnd side) (play-run (%io tty) rnd side)))
+               (match ((Opts on? opts "-w") (%window-play Sdl opts rnd side))
+                      ((Opts on? opts "-W") (%window-play Web opts rnd side))
+                      ((if tty (not (Opts on? opts "-L")) #f) (app-run rnd side))
+                      (#t (play-run (%io tty) rnd side))))
              (if (Term tty? 0) (Sys isatty 1) #f) (Random sw seed)))))))
+
+(def %web-ports (list 8080 8081 8082 8083 8084 8085 8086 8087 8088 8089 0))
+
+; --window and --web: the board in a window, or in a browser tab, which
+; prints its address: the exit status.
+(def %window-play
+  (fn (_ front opts rnd side)
+    (when (eq? front Web) (Web listen! (Opts value opts "-l" "127.0.0.1") %web-ports))
+    (if (if (eq? front Sdl) (not (Sdl available?)) #f)
+      (do (%say 2 "x-backgammon: no SDL3 to open a window with; --web plays in a browser tab\n") 1)
+      ((fn (_ failed)
+         (if (null? failed) 0
+           (do (%say 2 (Str8 append "x-backgammon: " (if (Err err? failed) (failed msg) (io-display-to-str failed)) "\n")) 1)))
+       (window-run front rnd side)))))
 
 ; ARGS, the command line after the launcher's options: the exit status.
 (def backgammon-main
