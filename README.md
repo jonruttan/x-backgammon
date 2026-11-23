@@ -80,10 +80,11 @@ play, waits a moment so it can be watched.
 
     Backspace, u   take back a step, or your last play
     h              the engine's best plays of your roll
+    c              the coach on or off
     n              a new game; the games won are counted
     v              turn the board
     :              a command: white, black, both, none, dice DD, new,
-                   hint, quit
+                   hint, coach, quit
     ?              the keys
     q              quit
 
@@ -108,6 +109,22 @@ place, and the engine's plays are shown a checker at a time.  The dice
 rattle and clack, a checker knocks down, a hit lands harder, and a game
 won has its chord.  The sounds are made by x-lang's mixer, and are
 heard only where its compiled loops can be built.
+
+## Hints and the coach
+
+`h` (or the Hint button) gives the engine's three best plays of your
+roll, each with the pips it scores below the best; in a window the best
+is drawn on the board, a gold line from each checker it moves to a ring
+where it lands.
+
+The coach judges each play of yours against the engine's.  When the
+engine would have played it too it says so; when not, it gives the play
+the engine prefers, by how many pips, and why: the part of the score
+where the two differ most, whether that is a better point made, a
+longer prime, a checker hit, fewer of yours on the bar, fewer shots at
+your blots, or the race.  Its word stays under the board until your
+next play.  A roll with one play is not judged.  `c` (the Coach button,
+marked while it is on, or the command `coach`) turns it off and on.
 
 ## The engine
 

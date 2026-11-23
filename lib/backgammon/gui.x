@@ -60,8 +60,8 @@
 (def %buttons-y 300)
 
 (def %buttons
-  (list (list "New game" "n") (list "Take back" "u") (list "Hint" "h") (list "Turn board" "v")
-        (list "Keys" "?") (list "Quit" "q")))
+  (list (list "New game" "n") (list "Take back" "u") (list "Hint" "h") (list "Coach" "c")
+        (list "Turn board" "v") (list "Keys" "?") (list "Quit" "q")))
 
 (def gui-width (fn (_) %width))
 (def gui-height (fn (_) %height))
@@ -383,6 +383,37 @@
            (gui-spot n #t (if (int< 0 (rest counts)) 0 (first counts)) (int+ (first counts) 1)))))
       dests)))
 
+; The play hinted, each step (FROM TO) a gold line from the checker that
+; moves to a ring where it lands, the steps made one after another.
+(def %hint-marks!
+  (fn (_ c p view hint)
+    (def moved (Vector make 26 0))
+    (def own (fn (_ n) (int+ (first (tui-counts p view n)) (Vector ref n moved))))
+    (def add! (fn (_ n d) (Vector set! n (int+ (Vector ref n moved) d) moved)))
+    (def wide (int* 4 256))
+    (List for-each
+      (fn (_ s)
+        (def from (first s))
+        (def to (%2nd s))
+        (def a (gui-spot from #t (int- (own from) 1) (own from)))
+        (add! from -1)
+        (def b (if (int= to 0) (gui-spot 0 #t (own 0) 15)
+                 (gui-spot to #t (if (int< 0 (rest (tui-counts p view to))) 0 (own to)) (int+ (own to) 1))))
+        (add! to 1)
+        (Shape strokes! c (list (pair #f (list (pair (int* (first a) 256) (int* (rest a) 256)) (pair (int* (first b) 256) (int* (rest b) 256)))))
+          wide %c-gold)
+        (if (int= to 0)
+          (Canvas fill! c (int+ %tray-x 4) (int- (rest b) 7) (int- %tray-w 8) 14 %c-gold)
+          (Shape strokes! c (list (pair #t (%circle (first b) (rest b) (int- %r 3)))) wide %c-gold)))
+      hint)))
+
+; The coach's button marked while the coach is on.
+(def %coach-mark!
+  (fn (_ c on)
+    (when on
+      ((fn (_ y) (Shape fill! c (list (%circle (int+ %px (int- %pw2 20)) (int+ y (int/ %button-h 2)) 5)) %c-gold))
+       (int+ %buttons-y (int* 3 (int+ %button-h 10)))))))
+
 ; A die showing FACE, its middle at X Y, turned by step A; DIM when used.
 (def %pips
   (list (list (pair 0 0)) (list (pair -1 -1) (pair 1 1)) (list (pair -1 -1) (pair 0 0) (pair 1 1))
@@ -507,6 +538,8 @@
     (%cursor! c (%get view (lit cursor)))
     (%checkers! g c p side (%get view (lit sel)) (found (lit hide)))
     (%dests! g c p side (%get view (lit dests)))
+    (%hint-marks! c p side (%get view (lit hint)))
+    (%coach-mark! c (%get view (lit coaching)))
     (if (null? (found (lit dice)))
       (%dice! c side turn (%get view (lit dice)) (%get view (lit used)))
       (List for-each (fn (_ d) (%die! c (List ref 1 d) (List ref 2 d) (first d) (List ref 3 d) (found (lit roller)) #f)) (found (lit dice))))

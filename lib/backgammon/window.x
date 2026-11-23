@@ -209,7 +209,7 @@
            (def b (if (int= to 0) (gui-spot 0 mine (own 0) 15) (gui-spot to mine (own to) (int+ (own to) 1))))
            (def u (%ease t))
            (pair (%over view (list (pair (lit pos) p) (pair (lit turn) mover) (pair (lit dice) dice) (pair (lit used) used)
-                                   (pair (lit sel) ()) (pair (lit dests) ())))
+                                   (pair (lit sel) ()) (pair (lit dests) ()) (pair (lit hint) ())))
                  (list (pair (lit hide) (pair from mover))
                        (pair (lit moving) (list mover (int+ (first a) (int/ (int* (int- (first b) (first a)) u) 1000))
                                                 (int+ (rest a) (int/ (int* (int- (rest b) (rest a)) u) 1000)))))))
