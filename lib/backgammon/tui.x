@@ -36,6 +36,7 @@
 (import backgammon/board WHITE BLACK BAR pos-me pos-opp pos-turn pos-me-off pos-opp-off pos-me-pips pos-opp-pips
   step-die play-text play-find play-after play-next play-done)
 (import backgammon/eval eval-ranked eval-best)
+(import backgammon/coach coach-judge)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-set-dice!
   game-play! game-undo! game-plays)
 (import backgammon/play side-word)
@@ -70,6 +71,9 @@
 (def %score 15)
 (def %scored 16)
 (def %events 17)
+(def %coach 18)
+(def %coaching 19)
+(def %hinted 20)
 
 (def %get (fn (_ st i) (Vector ref i st)))
 (def %put! (fn (_ st i v) (Vector set! i v st)))
@@ -84,13 +88,14 @@
     ((fn (_ h) (match ((eq? h (lit both)) #t) ((eq? h (lit none)) #f) ((eq? h (lit white)) (int= side WHITE)) (#t (int= side BLACK))))
      (%get st %human))))
 
-(def %clear-play! (fn (_ st) (%put! st %sel ()) (%put! st %done ()) (%put! st %dests ())))
+(def %clear-play! (fn (_ st) (%put! st %sel ()) (%put! st %done ()) (%put! st %dests ()) (%put! st %hinted ())))
 
 (def %new-game!
   (fn (_ st)
     (def g (game-new (%get st %rnd)))
     (%put! st %game g)
     (%clear-play! st)
+    (%put! st %coach "")
     (%put! st %scored ())
     (%put! st %msg "")
     (%put! st %last
@@ -103,7 +108,7 @@
 ; HUMAN: white, black, both or none.
 (def tui-make
   (fn (_ rnd human)
-    (def st (Vector make 18 ()))
+    (def st (Vector make 21 ()))
     (%put! st %rnd rnd)
     (%put! st %human human)
     (%put! st %view (if (eq? human (lit black)) BLACK WHITE))
@@ -112,6 +117,7 @@
     (%put! st %help #f)
     (%put! st %quit #f)
     (%put! st %score (pair 0 0))
+    (%put! st %coaching #t)
     (%new-game! st)
     st))
 
@@ -123,7 +129,7 @@
 (def tui-score (fn (_ st) (%get st %score)))
 
 ; ST playing game G from here: for a position set up by hand.
-(def tui-game! (fn (_ st g) (%put! st %game g) (%clear-play! st) (%put! st %scored ()) (%put! st %last "") (%put! st %msg "") (%event! st (list (lit jump))) (%roll-event! st) st))
+(def tui-game! (fn (_ st g) (%put! st %game g) (%clear-play! st) (%put! st %scored ()) (%put! st %last "") (%put! st %msg "") (%put! st %coach "") (%event! st (list (lit jump))) (%roll-event! st) st))
 
 ; --- plays ------------------------------------------------------------------------
 
@@ -151,6 +157,9 @@
       (Str8 append (%name (game-turn g)) " rolled " (%dice-text (game-dice g)) " and " how
         (if (null? (first pl)) "" (Str8 append " " (play-text pl))) "."))
     (unless shown (%step-events! st (game-pos g) (game-dice g) (first pl) ()))
+    (when (if (%get st %coaching) (%human? st (game-turn g)) #f)
+      ((fn (_ j) (%put! st %coach (if (null? j) "" (rest j))))
+       (coach-judge (game-pos g) (first (game-dice g)) (%2nd (game-dice g)) pl)))
     (game-play! g pl)
     (%clear-play! st)
     (%put! st %last text)
@@ -267,6 +276,7 @@
     (%step-events! st (%shown st) (game-dice g) steps (List map step-die (%get st %done)))
     (def done (List append (%get st %done) steps))
     (%put! st %done done)
+    (%put! st %hinted ())
     (%put! st %sel ())
     (%put! st %dests ())
     (%put! st %msg "")
@@ -347,6 +357,7 @@
     (if (game-over? g) (%put! st %msg "The game is over.")
       ((fn (_ ranked)
          (def best (first (first ranked)))
+         (%put! st %hinted (first (rest (first ranked))))
          (%put! st %msg
            (Str8 append "Hint: "
              (Str8 join "  ·  "
@@ -354,6 +365,16 @@
                                      (Str8 append (play-text (rest r)) " " (%score-text (int- (first r) best)))))
                  (List take 3 ranked))))))
        (eval-ranked (game-pos g) (first (game-dice g)) (%2nd (game-dice g)))))))
+
+(def %coach-toggle!
+  (fn (_ st)
+    (%put! st %coaching (not (%get st %coaching)))
+    (%put! st %coach "")
+    (%put! st %msg (if (%get st %coaching) "The coach is on: each play of yours is judged." "The coach is off."))))
+
+; The message shown: what was last said, or else the coach's word on
+; the last play of yours.
+(def %note (fn (_ st) (if (str=? (%get st %msg) "") (%get st %coach) (%get st %msg))))
 
 ; --- keys -------------------------------------------------------------------------
 
@@ -419,6 +440,7 @@
       ((if (str=? cmd "q") #t (str=? cmd "quit")) (%put! st %quit #t))
       ((str=? cmd "new") (%new-game! st))
       ((str=? cmd "hint") (%hint! st))
+      ((str=? cmd "coach") (%coach-toggle! st))
       ((str=? cmd "help") (%put! st %help #t))
       ((not (null? (side-word cmd)))
         (do (%put! st %human (side-word cmd))
@@ -480,6 +502,7 @@
       ((%is? key "?") (%put! st %help #t))
       ((%is? key "u") (%back! st))
       ((%is? key "h") (%hint! st))
+      ((%is? key "c") (%coach-toggle! st))
       ((%is? key "n") (%new-game! st))
       ((%is? key "v") (%put! st %view (int- 1 (%get st %view))))
       ((%is? key ":") (%put! st %command ""))
@@ -718,7 +741,7 @@
     (def s (%get st %score))
     (Screen put screen 16 (int+ end 2) (Str8 append "games " (%num (first s)) "-" (%num (rest s))) (Style make (list (lit dim)) () ()))
     (Screen put screen 17 x (%get st %last) 0)
-    (Screen put screen 18 x (%get st %msg) (Style make (list (lit bold)) () ()))
+    (Screen put screen 18 x (%note st) (Style make (list (lit bold)) () ()))
     (Screen put screen (int- rows 1) x (%line-text st)
       (Style make (if (if (null? (%get st %command)) (str=? (%get st %input) "") #f) (list (lit dim)) ()) () ()))))
 
@@ -750,8 +773,9 @@
         ""
         "Backspace, u  take back a step, or your play"
         "h  hint       n  new game     v  turn board"
+        "c  the coach on or off"
         ":  a command: white, black, both, none,"
-        "   dice 31, new, hint, quit"
+        "   dice 31, new, hint, coach, quit"
         "?  these keys q  quit"
         ""
         "Any key closes this."))
@@ -812,7 +836,9 @@
           (pair (lit cursor) (%get st %cursor))
           (pair (lit human) (%get st %human))
           (pair (lit last) (%get st %last))
-          (pair (lit msg) (%get st %msg))
+          (pair (lit msg) (%note st))
+          (pair (lit hint) (List map (fn (_ s) (list (%viewer-place st (first s)) (%viewer-place st (%2nd s)))) (%get st %hinted)))
+          (pair (lit coaching) (%get st %coaching))
           (pair (lit line) (%line-text st))
           (pair (lit help) (if (%get st %help) %help-lines ()))
           (pair (lit score) (%get st %score)))))

@@ -98,21 +98,28 @@
 
 (def %total (fn (_ ns) (List fold (fn (_ a b) (int+ a b)) 0 ns)))
 
-; P scored for the side that has just played.
-(def evaluate
+; P's score for the side that has just played, in its parts, as
+; ((NAME . PIPS) ...): race the pip counts' difference; points the made
+; points' worth against the other side's; prime the longest runs of made
+; points; hit the other side's checkers on the bar; bar this side's on
+; the bar; risk the shots at this side's blots.  Out of contact there is
+; only the race.
+(def eval-parts
   (fn (_ p)
     (def race (int- (pos-opp-pips p) (pos-me-pips p)))
-    (if (not (eval-contact? p)) race
+    (if (not (eval-contact? p)) (list (pair (lit race) race))
       ((fn (_ mine theirs)
-         (%total
-           (list race
-             (int- (first mine) (first theirs))
-             (int* 3 (int- (int* (rest mine) (rest mine)) (int* (rest theirs) (rest theirs))))
-             (int* (pos-opp p BAR) (int+ 6 (int* 3 (%home-made (fn (_ i) (pos-me p i))))))
-             (int- 0 (int* (pos-me p BAR) (int+ 6 (int* 3 (%home-made (fn (_ j) (pos-opp p j)))))))
-             (int- 0 (%risk p)))))
+         (list (pair (lit race) race)
+               (pair (lit points) (int- (first mine) (first theirs)))
+               (pair (lit prime) (int* 3 (int- (int* (rest mine) (rest mine)) (int* (rest theirs) (rest theirs)))))
+               (pair (lit hit) (int* (pos-opp p BAR) (int+ 6 (int* 3 (%home-made (fn (_ i) (pos-me p i)))))))
+               (pair (lit bar) (int- 0 (int* (pos-me p BAR) (int+ 6 (int* 3 (%home-made (fn (_ j) (pos-opp p j))))))))
+               (pair (lit risk) (int- 0 (%risk p)))))
        (%points (fn (_ i) (pos-me p i)))
        (%points (fn (_ j) (pos-opp p j)))))))
+
+; P scored for the side that has just played: its parts' sum.
+(def evaluate (fn (_ p) (%total (List map rest (eval-parts p)))))
 
 ; The plays of D1 D2 from P, each as (SCORE . PLAY), the best first.
 (def eval-ranked
@@ -123,4 +130,4 @@
 ; The play the engine picks for D1 D2 from P.
 (def eval-best (fn (_ p d1 d2) (rest (first (eval-ranked p d1 d2)))))
 
-(provide backgammon/eval evaluate eval-contact? eval-ranked eval-best)
+(provide backgammon/eval evaluate eval-parts eval-contact? eval-ranked eval-best)

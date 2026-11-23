@@ -14,7 +14,8 @@
 (import backgammon/board BAR CHECKERS WHITE BLACK pos-me pos-opp pos-turn pos-make pos-start
   pos-swap pos-me-off pos-opp-off pos-me-pips pos-opp-pips pos-over? plays rolls perft play-text play-find)
 (import backgammon/show board-lines board-text)
-(import backgammon/eval evaluate eval-contact? eval-ranked eval-best)
+(import backgammon/eval evaluate eval-parts eval-contact? eval-ranked eval-best)
+(import backgammon/coach coach-judge)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-play! game-undo! game-plays)
 (import backgammon/play play-run)
 
@@ -95,3 +96,10 @@
 (def spec-pixel (fn (_ g x y) (Canvas pixel (gui-canvas g) x y)))
 
 (def spec-gui (fn (_ st) ((fn (_ g) (gui-draw! g (tui-view st) ()) g) (gui-make))))
+
+; --- the coach --------------------------------------------------------------------
+;
+; What ST's view says under the last play: what was said, or the coach's
+; word; and what the view holds at KEY.
+(def spec-view (fn (_ st key) (rest (Assoc find key (tui-view st)))))
+(def spec-note (fn (_ st) (spec-view st (lit msg))))
