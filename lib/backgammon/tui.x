@@ -48,7 +48,9 @@
 ; play so far; where the checker picked can go, a list of (TO . STEPS);
 ; the message; the play being typed; the command being typed, or (); the
 ; keys shown; quit; what was last played; the layout last drawn, (WIDTH
-; X0); the games won, (WHITE . BLACK); and the result counted in them.
+; X0); the games won, (WHITE . BLACK); the result counted in them; and
+; what has happened since it was last asked, for a window to show: see
+; tui-events!.
 
 (def %game 0)
 (def %rnd 1)
@@ -67,6 +69,7 @@
 (def %layout 14)
 (def %score 15)
 (def %scored 16)
+(def %events 17)
 
 (def %get (fn (_ st i) (Vector ref i st)))
 (def %put! (fn (_ st i v) (Vector set! i v st)))
@@ -92,13 +95,15 @@
     (%put! st %msg "")
     (%put! st %last
       (Str8 append "White rolls " (%num (first (game-dice g))) ", Black rolls " (%num (%2nd (game-dice g)))
-        ": " (%name (game-turn g)) " moves first."))))
+        ": " (%name (game-turn g)) " moves first."))
+    (%event! st (list (lit jump)))
+    (%roll-event! st)))
 
 ; The board interface's state, the dice from RND, the people playing
 ; HUMAN: white, black, both or none.
 (def tui-make
   (fn (_ rnd human)
-    (def st (Vector make 17 ()))
+    (def st (Vector make 18 ()))
     (%put! st %rnd rnd)
     (%put! st %human human)
     (%put! st %view (if (eq? human (lit black)) BLACK WHITE))
@@ -118,7 +123,7 @@
 (def tui-score (fn (_ st) (%get st %score)))
 
 ; ST playing game G from here: for a position set up by hand.
-(def tui-game! (fn (_ st g) (%put! st %game g) (%clear-play! st) (%put! st %scored ()) (%put! st %last "") (%put! st %msg "") st))
+(def tui-game! (fn (_ st g) (%put! st %game g) (%clear-play! st) (%put! st %scored ()) (%put! st %last "") (%put! st %msg "") (%event! st (list (lit jump))) (%roll-event! st) st))
 
 ; --- plays ------------------------------------------------------------------------
 
@@ -137,22 +142,55 @@
     (%put! st %score (if (int= (first r) WHITE) (pair (int+ (first s) n) (rest s)) (pair (first s) (int+ (rest s) n))))))
 
 ; The side to move's play PL made; HOW says how, "played", "had to play"
-; or "cannot move".
+; or "cannot move".  SHOWN is #t when its steps were made one at a time,
+; each already an event.
 (def %commit!
-  (fn (_ st pl how)
+  (fn (_ st pl how shown)
     (def g (%get st %game))
     (def text
       (Str8 append (%name (game-turn g)) " rolled " (%dice-text (game-dice g)) " and " how
         (if (null? (first pl)) "" (Str8 append " " (play-text pl))) "."))
+    (unless shown (%step-events! st (game-pos g) (game-dice g) (first pl) ()))
     (game-play! g pl)
     (%clear-play! st)
     (%put! st %last text)
     (%put! st %msg "")
-    (when (game-over? g)
+    (if (game-over? g)
       (do (%count! st (game-result g) 1)
           (%put! st %scored (game-result g))
-          (%put! st %msg (%result-text (game-result g)))))
+          (%put! st %msg (%result-text (game-result g)))
+          (%event! st (pair (lit over) (game-result g))))
+      (%roll-event! st))
     (Heap collect)))
+
+; --- events -----------------------------------------------------------------------
+;
+; What has happened, oldest first, as a window shows it:
+;   (roll SIDE D1 D2)            SIDE's dice thrown, D1 D2 to play
+;   (step POS STEP DICE USED)    a checker moved: STEP, (FROM TO HIT), made
+;                                in POS, seen from the side to move, which
+;                                is playing DICE and has used the dice
+;                                USED before it
+;   (over WINNER POINTS)         the game won
+;   (jump)                       the board changed without a play: taken
+;                                back, set up, or a new game coming
+; The terminal shows none of them, and takes them to keep the list short.
+
+(def %event! (fn (_ st e) (%put! st %events (List append (%get st %events) (list e)))))
+
+(def %roll-event!
+  (fn (_ st) ((fn (_ g) (%event! st (list (lit roll) (game-turn g) (first (game-dice g)) (%2nd (game-dice g))))) (%get st %game))))
+
+; A step event for each of STEPS made from P in turn, the dice USED before
+; them.
+(def %step-events!
+  (fn (self st p dice steps used)
+    (unless (null? steps)
+      (do (%event! st (list (lit step) p (first steps) dice used))
+          (self st (play-after p (list (first steps))) dice (rest steps) (List append used (list (step-die (first steps)))))))))
+
+; The events since the last time, oldest first; the list emptied.
+(def tui-events! (fn (_ st) ((fn (_ es) (%put! st %events ()) es) (%get st %events))))
 
 ; Whether the side to move is played without a person: the engine's
 ; side, or a roll with one play.
@@ -172,8 +210,8 @@
     (def g (%get st %game))
     (def d (game-dice g))
     (if (%human? st (game-turn g))
-      ((fn (_ pl) (%commit! st pl (if (null? (first pl)) "cannot move" "had to play"))) (first (game-plays g)))
-      (%commit! st (eval-best (game-pos g) (first d) (%2nd d)) "played"))))
+      ((fn (_ pl) (%commit! st pl (if (null? (first pl)) "cannot move" "had to play") #f)) (first (game-plays g)))
+      (%commit! st (eval-best (game-pos g) (first d) (%2nd d)) "played" #f))))
 
 ; The places, as the viewer counts them: 1 to 24 its points, 25 the bar
 ; and 0 the tray.  As the side to move's index: BAR, -1 for off, or the
@@ -226,13 +264,14 @@
 (def %make!
   (fn (_ st steps)
     (def g (%get st %game))
+    (%step-events! st (%shown st) (game-dice g) steps (List map step-die (%get st %done)))
     (def done (List append (%get st %done) steps))
     (%put! st %done done)
     (%put! st %sel ())
     (%put! st %dests ())
     (%put! st %msg "")
     (when (null? (%next-steps st done))
-      (%commit! st (play-done (game-pos g) (first (game-dice g)) (%2nd (game-dice g)) done) "played"))))
+      (%commit! st (play-done (game-pos g) (first (game-dice g)) (%2nd (game-dice g)) done) "played" #t))))
 
 (def %select!
   (fn (_ st i)
@@ -278,12 +317,13 @@
     (def g (%get st %game))
     (match
       ((not (null? (%get st %done)))
-        (do (%put! st %done (List init (%get st %done))) (%put! st %sel ()) (%put! st %dests ()) (%put! st %msg "")))
+        (do (%put! st %done (List init (%get st %done))) (%put! st %sel ()) (%put! st %dests ()) (%put! st %msg "") (%event! st (list (lit jump)))))
       ((game-undo! g (fn (_ side) (%human? st side)))
         (do (unless (null? (%get st %scored)) (%count! st (%get st %scored) -1))
             (%clear-play! st)
             (%put! st %scored ())
             (%put! st %last "Your last play is taken back.")
+            (%event! st (list (lit jump)))
             (%put! st %msg "")))
       (#t (%put! st %msg "There is nothing of yours to take back.")))))
 
@@ -296,7 +336,7 @@
       ((not (%human? st (game-turn g))) (%put! st %msg "It is not your turn."))
       (#t ((fn (_ found)
              (if (str? found) (%put! st %msg (Str8 append found ": " text))
-               (%commit! st found "played")))
+               (%commit! st found "played" #f)))
            (play-find (game-pos g) (first (game-dice g)) (%2nd (game-dice g)) text))))))
 
 (def %score-text (fn (_ s) (if (int< s 0) (Str8 append "−" (%num (int- 0 s))) (Str8 append "+" (%num s)))))
@@ -391,7 +431,7 @@
       ((str=? cmd "dice")
         ((fn (_ d)
            (if (null? d) (%put! st %msg "dice takes two dice: dice 31")
-             (do (game-set-dice! (%get st %game) (first d) (%2nd d)) (%clear-play! st) (%put! st %msg ""))))
+             (do (game-set-dice! (%get st %game) (first d) (%2nd d)) (%clear-play! st) (%put! st %msg "") (%event! st (list (lit jump))) (%roll-event! st))))
          (if (null? (rest words)) () (%dice-word (%2nd words)))))
       (#t (%put! st %msg (Str8 append "No such command: " cmd ".  ? lists them."))))))
 
@@ -409,13 +449,23 @@
     (when (if (int= (List ref 1 key) 0) (if (List ref 4 key) (not (null? place)) #f) #f)
       (do (%put! st %cursor (rest place)) (%pick! st (first place))))))
 
-; KEY pressed.
+; Place N chosen by a window: the cursor put on it, and picked.
+(def %place-key!
+  (fn (_ st n)
+    (match ((int= n 0) (%put! st %cursor (pair #f 13)))
+           ((int= n 25) (%put! st %cursor (pair (first (%get st %cursor)) 6)))
+           (#t (%put! st %cursor (%place-slot n))))
+    (%pick! st n)))
+
+; KEY pressed: a string for a character, a key's name, a terminal's
+; (mouse BUTTON COL ROW PRESS?), or a window's (place N).
 (def tui-key!
   (fn (_ st key)
     (match
       ((not (null? (%get st %command))) (%command-key! st key))
       ((%get st %help) (%put! st %help #f))
       ((if (pair? key) (eq? (first key) (lit mouse)) #f) (%mouse! st key))
+      ((if (pair? key) (eq? (first key) (lit place)) #f) (%place-key! st (%2nd key)))
       ((not (str=? (%get st %input) "")) (%input-key! st key))
       ((%digit? key) (%put! st %input key))
       ((if (eq? key (lit enter)) #t (%is? key " "))
@@ -479,14 +529,18 @@
        (first lay) (int- col (int+ (%2nd lay) 1))))))
 
 ; The checkers of each side on the viewer's place N: (VIEWER . OTHER).
-(def %counts
-  (fn (_ st p n)
-    (def mine (int= (pos-turn p) (%get st %view)))
+; The checkers of each side on place N as VIEW counts the places, in P:
+; (VIEW'S . THE OTHER'S).
+(def tui-counts
+  (fn (_ p view n)
+    (def mine (int= (pos-turn p) view))
     (match
       ((int= n 25) (if mine (pair (pos-me p BAR) (pos-opp p BAR)) (pair (pos-opp p BAR) (pos-me p BAR))))
       ((int= n 0) (if mine (pair (pos-me-off p) (pos-opp-off p)) (pair (pos-opp-off p) (pos-me-off p))))
       (mine (pair (pos-me p (int- n 1)) (pos-opp p (int- 24 n))))
       (#t (pair (pos-opp p (int- n 1)) (pos-me p (int- 24 n)))))))
+
+(def %counts (fn (_ st p n) (tui-counts p (%get st %view) n)))
 
 ; The position shown: the game's with the steps made so far.
 (def %shown (fn (_ st) (play-after (game-pos (%get st %game)) (%get st %done))))
@@ -665,12 +719,17 @@
     (Screen put screen 16 (int+ end 2) (Str8 append "games " (%num (first s)) "-" (%num (rest s))) (Style make (list (lit dim)) () ()))
     (Screen put screen 17 x (%get st %last) 0)
     (Screen put screen 18 x (%get st %msg) (Style make (list (lit bold)) () ()))
-    (Screen put screen (int- rows 1) x
-      (match ((not (null? (%get st %command))) (Str8 append ":" (%get st %command) "▏"))
-             ((not (str=? (%get st %input) "")) (Str8 append "Play: " (%get st %input) "▏   Enter plays it, Esc clears"))
-             ((not (null? (%get st %done))) (Str8 append "Made: " (Str8 join " " (List map %step-text (%get st %done))) "   ⌫ takes a step back"))
-             (#t %keys-line))
+    (Screen put screen (int- rows 1) x (%line-text st)
       (Style make (if (if (null? (%get st %command)) (str=? (%get st %input) "") #f) (list (lit dim)) ()) () ()))))
+
+; The bottom line: the command or the play being typed, the steps made,
+; or the keys.
+(def %line-text
+  (fn (_ st)
+    (match ((not (null? (%get st %command))) (Str8 append ":" (%get st %command) "▏"))
+           ((not (str=? (%get st %input) "")) (Str8 append "Play: " (%get st %input) "▏   Enter plays it, Esc clears"))
+           ((not (null? (%get st %done))) (Str8 append "Made: " (Str8 join " " (List map %step-text (%get st %done))) "   ⌫ takes a step back"))
+           (#t %keys-line))))
 
 (def %step-text
   (fn (_ s)
@@ -729,6 +788,38 @@
         (%status! st screen rows (if (int< (%2nd lay) 0) 0 (%2nd lay)))
         (when (%get st %help) (%help! st screen rows cols))))))
 
+; --- for a window -----------------------------------------------------------------
+
+; What a window draws, as an alist: pos, the position shown, seen from
+; the side to move; view, the side drawn at the bottom; turn, the side
+; to move, () once the game is over; dice, the side to move's (D1 D2) or
+; (); used, the dice its steps so far have used; sel, the viewer's place
+; of the checker picked, or (); dests, the places it can go; cursor,
+; (TOP . SLOT); human, white, black, both or none; last, msg and line,
+; the texts; help, the lines of the keys while they are shown, else ();
+; and score, the games won, (WHITE . BLACK).
+(def tui-view
+  (fn (_ st)
+    (def g (%get st %game))
+    (def over (game-over? g))
+    (list (pair (lit pos) (%shown st))
+          (pair (lit view) (%get st %view))
+          (pair (lit turn) (if over () (game-turn g)))
+          (pair (lit dice) (if over () (game-dice g)))
+          (pair (lit used) (List map step-die (%get st %done)))
+          (pair (lit sel) (if (null? (%get st %sel)) () (%viewer-place st (%get st %sel))))
+          (pair (lit dests) (List map (fn (_ c) (%viewer-place st (first c))) (%get st %dests)))
+          (pair (lit cursor) (%get st %cursor))
+          (pair (lit human) (%get st %human))
+          (pair (lit last) (%get st %last))
+          (pair (lit msg) (%get st %msg))
+          (pair (lit line) (%line-text st))
+          (pair (lit help) (if (%get st %help) %help-lines ()))
+          (pair (lit score) (%get st %score)))))
+
+; Whether a person plays SIDE in ST.
+(def tui-human? (fn (_ st side) (%human? st side)))
+
 (provide backgammon/tui
   tui-make tui-game tui-game! tui-quit? tui-message tui-last tui-done tui-score
-  tui-engine-to-move? tui-auto-play! tui-key! tui-draw!)
+  tui-engine-to-move? tui-auto-play! tui-key! tui-draw! tui-events! tui-view tui-counts tui-human?)

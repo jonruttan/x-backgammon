@@ -60,7 +60,7 @@
 (import backgammon/board play-next play-after play-done step-die)
 (import backgammon/game game-at)
 (import backgammon/tui tui-make tui-game tui-game! tui-quit? tui-message tui-last tui-done tui-score
-  tui-engine-to-move? tui-auto-play! tui-key! tui-draw!)
+  tui-engine-to-move? tui-auto-play! tui-key! tui-draw! tui-events! tui-view tui-counts)
 
 (def spec-rows
   (fn (_ screen rows)
@@ -69,6 +69,7 @@
 (def spec-tui
   (fn (_ human d1 d2)
     (def st (tui-make (Random sw 1) human))
+    (tui-events! st)
     (tui-game! st (game-at (pos-start) (list d1 d2) (Random sw 1)))))
 
 (def spec-draw! (fn (_ st screen) (Heap collect) (tui-draw! st screen)))
@@ -80,3 +81,17 @@
 ; The next steps of D1 D2 from P after DONE, as (FROM TO) indices.
 (def spec-next
   (fn (_ p d1 d2 done) (List map (fn (_ s) (list (first s) (first (rest s)))) (play-next p d1 d2 done))))
+
+; --- the board in a window ------------------------------------------------------
+;
+; The kinds of the events ST has had since last asked; a picture's pixel
+; at X Y; and the board drawn from ST's view, the gui answered.
+(import x/gfx/canvas)
+(import backgammon/gui gui-make gui-draw! gui-at gui-spot gui-dice-x gui-canvas)
+(import backgammon/sound sound-render)
+
+(def spec-event-kinds (fn (_ st) (List map first (tui-events! st))))
+
+(def spec-pixel (fn (_ g x y) (Canvas pixel (gui-canvas g) x y)))
+
+(def spec-gui (fn (_ st) ((fn (_ g) (gui-draw! g (tui-view st) ()) g) (gui-make))))

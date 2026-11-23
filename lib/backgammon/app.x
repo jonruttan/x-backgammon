@@ -20,7 +20,7 @@
 (import x/repl/term)
 (import x/tui/screen)
 (import x/core/doors io-display-to-str)
-(import backgammon/tui tui-make tui-quit? tui-engine-to-move? tui-auto-play! tui-key! tui-draw!)
+(import backgammon/tui tui-make tui-quit? tui-engine-to-move? tui-auto-play! tui-key! tui-draw! tui-events!)
 
 (def %esc (fn (_ text) (Str8 append "\x1b" text)))
 
@@ -100,8 +100,13 @@
 ; KEY acted on: the end of the input quits.
 (def %act! (fn (_ st key) (tui-key! st (if (null? key) "q" key))))
 
+; The window's events, which the terminal does not show, taken so they
+; do not pile up.
+(def %drop-events! (fn (_ st) (tui-events! st)))
+
 (def %loop
   (fn (self st screen reader)
+    (%drop-events! st)
     (%show! st screen)
     (Heap collect)
     (match

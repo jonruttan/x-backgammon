@@ -9,20 +9,21 @@ turns that checks the move generator as perft checks a chess engine's.
 ```sh
 x -l backgammon -- play
 x -l backgammon -- play --side black --seed 7
+x -l backgammon -- play --window
 x -l backgammon -- --board
 x -l backgammon -- --roll 31
 x -l backgammon -- --perft 1
 ```
 
-`play` is a game against the engine, on the board when run on a
-terminal (below); `--side` is the side you play,
-white (the default), black, both, or none to watch the engine play
-itself.  The dice are drawn from a seed, printed at the start when
-`--seed N` does not give one, so a game can be played again.
-`--board` prints the starting board.  `--roll DD` prints every legal
-play of the roll from the start, one a line, and how many on standard
-error.  `--perft N` counts the plays over N turns, each of the 21 rolls
-once a turn.
+`play` is a game against the engine: on the board when run on a
+terminal, or in a window with `--window` or `--web` (below).  `--side`
+is the side you play, white (the default), black, both, or none to
+watch the engine play itself.  The dice are drawn from a seed, printed
+at the start when `--seed N` does not give one, so a game can be
+played again.  `--board` prints the starting board.  `--roll DD` prints
+every legal play of the roll from the start, one a line, and how many
+on standard error.  `--perft N` counts the plays over N turns, each of
+the 21 rolls once a turn.
 
 ## Playing
 
@@ -85,6 +86,28 @@ play, waits a moment so it can be watched.
                    hint, quit
     ?              the keys
     q              quit
+
+## In a window
+
+```sh
+x -l backgammon -- play --window
+x -l backgammon -- play --web
+```
+
+`--window` plays on a board drawn in a window through SDL3: the wooden
+frame, the felt in two halves with the bar between, the points, the
+tray at the right, the players and the buttons beside it.  `--web`
+draws the same board in a browser tab instead, its address printed,
+for when SDL3 is not there; `--listen ADDRESS` is where it listens
+(127.0.0.1).  A checker is moved by clicking it and then where it goes,
+or by dragging it there; the keys and the buttons do what the
+terminal's keys do.
+
+The dice tumble onto the felt and land, each checker slides to its
+place, and the engine's plays are shown a checker at a time.  The dice
+rattle and clack, a checker knocks down, a hit lands harder, and a game
+won has its chord.  The sounds are made by x-lang's mixer, and are
+heard only where its compiled loops can be built.
 
 ## The engine
 
