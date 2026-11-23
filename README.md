@@ -14,7 +14,8 @@ x -l backgammon -- --roll 31
 x -l backgammon -- --perft 1
 ```
 
-`play` is a game against the engine; `--side` is the side you play,
+`play` is a game against the engine, on the board when run on a
+terminal (below); `--side` is the side you play,
 white (the default), black, both, or none to watch the engine play
 itself.  The dice are drawn from a seed, printed at the start when
 `--seed N` does not give one, so a game can be played again.
@@ -26,8 +27,8 @@ once a turn.
 ## Playing
 
 Each side rolls one die to start; the higher moves first and plays
-both.  After that the dice are rolled for each turn.  The board is
-shown before each play of yours, with your roll:
+both.  After that the dice are rolled for each turn.  A line at a time
+the board is shown before each play of yours, with your roll:
 
 ```
 White to play 6-5> 24/13
@@ -57,6 +58,33 @@ Anything else is a command:
 A game won with the loser having borne off none is a gammon, 2 points;
 with a loser's checker also still on the bar or in the winner's home
 board, a backgammon, 3 points.  There is no doubling cube yet.
+
+## On the board
+
+On a terminal `play` fills it with the board: the points in two rows of
+twelve with the bar between them, the tray for the checkers borne off
+at the right, and the dice of the side to move on its own half.  The
+board is drawn from your side, your home board at the bottom right; it
+takes 46 columns by 20 rows, and is drawn larger from 72 columns.
+`--line` plays a line at a time instead, as when the input is not a
+terminal.
+
+Click a checker, then the place it goes: one die away, or both dice
+away to move it by both.  The places it can go are marked.  The arrows
+and Enter do the same as the mouse, and picking the same checker again
+moves it by the larger die.  The play is made once the dice are used.
+A play can be typed too, the way it is written, starting with its first
+digit.  A play made for a side, the engine's or a roll with only one
+play, waits a moment so it can be watched.
+
+    Backspace, u   take back a step, or your last play
+    h              the engine's best plays of your roll
+    n              a new game; the games won are counted
+    v              turn the board
+    :              a command: white, black, both, none, dice DD, new,
+                   hint, quit
+    ?              the keys
+    q              quit
 
 ## The engine
 

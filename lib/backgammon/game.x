@@ -52,6 +52,10 @@
 (def %2nd (fn (_ l) (first (rest l))))
 (def %start-men (fn (_) (list (pair 24 2) (pair 13 5) (pair 8 3) (pair 6 5))))
 
+; A game from position P, the side to move to play DICE, (D1 D2), the
+; dice after drawn from RND: a position set up by hand.
+(def game-at (fn (_ p dice rnd) (Vector of p dice () rnd ())))
+
 ; G's dice replaced by D1 D2, as when they are set by hand.
 (def game-set-dice! (fn (_ g d1 d2) (Vector set! %g-dice (list d1 d2) g) g))
 
@@ -102,5 +106,5 @@
 (def game-plays (fn (_ g) ((fn (_ d) (plays (game-pos g) (first d) (%2nd d))) (game-dice g))))
 
 (provide backgammon/game
-  game-pos game-dice game-past game-result game-over? game-turn game-throw game-new
+  game-pos game-dice game-past game-result game-over? game-turn game-throw game-new game-at
   game-set-dice! game-play! game-undo! game-plays)

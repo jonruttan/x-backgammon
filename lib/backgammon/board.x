@@ -237,6 +237,75 @@
             acc (plays p (first r) (%2nd r))))
         0 rolls))))
 
+; --- a play a step at a time ------------------------------------------------------
+;
+; A play made a checker and a die at a time, as on a board: DONE is the
+; steps made so far, in order.  A next step is one some legal play of the
+; roll can still be finished from.
+
+; P with STEPS made, on a copy.
+(def play-after
+  (fn (_ p steps)
+    (def q (pos-copy p))
+    (List for-each (fn (_ s) (%step! q (first s) (step-die s))) steps)
+    q))
+
+; L without its first D.
+(def %drop-die
+  (fn (self d l) (match ((null? l) ()) ((int= (first l) d) (rest l)) (#t (pair (first l) (self d (rest l)))))))
+
+; The dice of D1 D2 not used by STEPS.
+(def %dice-left
+  (fn (_ d1 d2 steps)
+    (List fold (fn (_ l s) (%drop-die (step-die s) l)) (if (int= d1 d2) (list d1 d1 d1 d1) (list d1 d2)) steps)))
+
+; Whether Q, with the dice LEFT to play, can come to a position KEYS holds
+; using N more of them.
+(def %finishes?
+  (fn (_ q left n keys)
+    (if (int= n 0) (keys has? (pos-key q))
+      ((fn (_ orders)
+         (List any?
+           (fn (_ dice)
+             (List any? (fn (_ l) (if (int= (first l) n) (keys has? (pos-key (rest (rest l)))) #f))
+               (%leaves q dice () 0 24 #f ())))
+           orders))
+       (if (if (int= (List length left) 2) (not (int= (first left) (%2nd left))) #f)
+         (list left (List reverse left))
+         (list left))))))
+
+; The next steps of D1 D2 from P after DONE: each a step (FROM TO HIT)
+; that some legal play goes on with; () when the play is complete.
+(def play-next
+  (fn (_ p d1 d2 done)
+    (def ps (plays p d1 d2))
+    (def most (List length (first (first ps))))
+    (def keys (Dict make))
+    (List for-each (fn (_ pl) (keys set! (pos-key (rest pl)) #t)) ps)
+    (def q (play-after p done))
+    (def left (%dice-left d1 d2 done))
+    (def n (int- most (List length done)))
+    (if (int< n 1) ()
+      (List fold
+        (fn (_ acc die)
+          (List append acc
+            (List fold
+              (fn (_ acc from)
+                (def q2 (pos-copy q))
+                (def s (%step! q2 from die))
+                (if (%finishes? q2 (%drop-die die left) (int- n 1) keys) (List append acc (list s)) acc))
+              () (List filter (fn (_ from) (%can? q from die)) (%origins q 24)))))
+        () (%distinct-dice left)))))
+
+(def %distinct-dice
+  (fn (_ l) (List fold (fn (_ acc d) (if (List includes? d acc) acc (List append acc (list d)))) () l)))
+
+; The legal play of D1 D2 from P that DONE completes, or ().
+(def play-done
+  (fn (_ p d1 d2 done)
+    ((fn (_ k) (List find (fn (_ pl) (str=? (pos-key (rest pl)) k)) (plays p d1 d2)))
+     (pos-key (play-after p done)))))
+
 ; --- text --------------------------------------------------------------------
 
 (def %place-name
@@ -422,4 +491,4 @@
   BAR CHECKERS WHITE BLACK
   pos-me pos-opp pos-turn pos-copy pos-make pos-start pos-swap
   pos-me-off pos-opp-off pos-me-pips pos-opp-pips pos-over? pos-key
-  step-die plays rolls perft steps-text play-text play-find)
+  step-die plays rolls perft steps-text play-text play-find play-after play-next play-done)
