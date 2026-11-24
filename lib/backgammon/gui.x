@@ -6,7 +6,7 @@
 ; @copyright 2026 Jon Ruttan
 ; @license MIT No Attribution (MIT-0)
 ;
-; Draws what tui-view says on an RGBA canvas (x/gfx/canvas) of %width by
+; Draws what tui-view says on an RGBA canvas (gfx/canvas) of %width by
 ; %height: the board in its wooden frame on the left, the felt in two
 ; halves with the bar between, the points, the tray for the checkers
 ; borne off at the right; the players and the buttons in a panel beside
@@ -23,14 +23,14 @@
 ; groove and a light; a die at rest the same.  A die turning is filled
 ; afresh each frame.
 ;
-; Lengths are pixels; points handed to x/gfx/shape are in 256ths of a
+; Lengths are pixels; points handed to gfx/shape are in 256ths of a
 ; pixel.  An angle is a step of 32 to the turn.
 
 (module backgammon/gui)
 
-(import x/gfx/canvas)
-(import x/gfx/shape)
-(import x/gfx/font)
+(import gfx/canvas)
+(import gfx/shape)
+(import gfx/font)
 (import x/type/vector)
 (import x/core/doors int+ int- int* int/ int% int< int= char->int io-display-to-str str-byte-len str-byte-ref)
 (import backgammon/board WHITE BLACK pos-me-pips pos-opp-pips pos-turn)
@@ -182,7 +182,7 @@
 
 ; --- text ---------------------------------------------------------------------------
 ;
-; x/gfx/font's strokes, a string drawn once as a mask, white on clear, and
+; gfx/font's strokes, a string drawn once as a mask, white on clear, and
 ; kept, then stamped in its colour wherever it is wanted.  The middle dot
 ; is a dot, the minus sign a hyphen; any other character past ASCII a
 ; space.
