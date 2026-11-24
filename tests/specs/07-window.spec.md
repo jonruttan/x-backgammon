@@ -19,7 +19,7 @@ x 848.
 ---
     (('jump) ('roll 0 3 1))
 
-### a play made a checker at a time: a step each, then the other side's dice
+### a play made a checker at a time: a step each, the other side then to roll
 
 ```backgammon
 (def st (spec-tui 'white 3 1))
@@ -29,7 +29,7 @@ x 848.
 (write (list (List map first es) (List ref 2 (first es)) (List ref 4 (first (rest es)))))
 ```
 ---
-    (('step 'step 'roll) (7 4 #f) (3))
+    (('step 'step) (7 4 #f) (3))
 
 ### the engine's play is shown a step at a time too
 
@@ -40,7 +40,7 @@ x 848.
 (write (spec-event-kinds st))
 ```
 ---
-    ('step 'step 'roll)
+    ('step 'step)
 
 ### taking a play back jumps
 

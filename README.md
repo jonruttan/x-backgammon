@@ -50,6 +50,9 @@ Anything else is a command:
     moves          every legal play of your roll
     pips           both pip counts
     dice DD        set your dice by hand, for a game on a real board
+    roll, double   before your roll, when the cube is yours or in the
+                   middle; Enter alone rolls
+    take, pass     when you are doubled
     undo           take back your last play
     new            a new game
     white, black   play that side against the engine
@@ -58,7 +61,30 @@ Anything else is a command:
 
 A game won with the loser having borne off none is a gammon, 2 points;
 with a loser's checker also still on the bar or in the winner's home
-board, a backgammon, 3 points.  There is no doubling cube yet.
+board, a backgammon, 3 points.
+
+## The cube
+
+Play is for money, with the doubling cube: a game is worth its points
+times the cube.  The cube starts in the middle at 1.  Before a roll, a
+side may double while the cube is in the middle or its own.  The other
+side takes, and owns the cube at twice the value, so only it may double
+next; or passes, and loses the game at the value the cube had.  The
+cube goes no higher than 64.  There is no Jacoby rule and there are no
+beavers.
+
+The engine judges the cube only in a race.  While the sides still meet
+it never doubles and always takes.  In a bear-off the table gives the
+chance the side to roll wins: the engine doubles from 68%, or from over
+even when the other side is sure to be off next roll, and takes while it
+keeps 22%, or 25% against a side sure to be off.  In a longer race it
+goes by the Keith count: the pips, plus 2 for each checker past the
+first on the 1-point, 1 for each past the first on the 2-point, 1 for
+each past the third on the 3-point, and 1 for each of the 4-, 5- and
+6-points empty; the side to roll adds a seventh of its count.  It
+doubles when its count is at most 4 ahead of the other's (3 to
+redouble), and takes when the doubler's count is at least 2 ahead.
+`h` before a roll, or when doubled, says what the engine would do.
 
 ## On the board
 
@@ -81,10 +107,13 @@ play, waits a moment so it can be watched.
     Backspace, u   take back a step, or your last play
     h              the engine's best plays of your roll
     c              the coach on or off
-    n              a new game; the games won are counted
+    r, Enter       roll, when you may double first
+    d              double
+    t, p           take or pass a double
+    n              a new game; the points won are counted
     v              turn the board
     :              a command: white, black, both, none, dice DD, new,
-                   hint, coach, quit
+                   hint, coach, roll, double, take, pass, quit
     ?              the keys
     q              quit
 
@@ -102,7 +131,9 @@ draws the same board in a browser tab instead, its address printed,
 for when SDL3 is not there; `--listen ADDRESS` is where it listens
 (127.0.0.1).  A checker is moved by clicking it and then where it goes,
 or by dragging it there; the keys and the buttons do what the
-terminal's keys do.
+terminal's keys do.  The cube sits in the tray between the rows, moved
+toward its owner's side once owned; while you may roll or double, or
+are doubled, two buttons below the others give the choice.
 
 The dice tumble onto the felt and land, each checker slides to its
 place, and the engine's plays are shown a checker at a time.  The dice

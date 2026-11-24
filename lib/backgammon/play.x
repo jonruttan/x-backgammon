@@ -18,12 +18,14 @@
 
 (import x/type/vector)
 (import x/sys/gc)
-(import x/core/doors int+ int- int< int= io-display-to-str str-byte-len str-byte-ref str-byte-sub)
+(import x/core/doors int+ int- int* int< int= io-display-to-str str-byte-len str-byte-ref str-byte-sub)
 (import backgammon/board WHITE BLACK pos-turn pos-me-pips pos-opp-pips play-text play-find)
 (import backgammon/eval eval-ranked eval-best eval-contact?)
 (import backgammon/bearoff bearoff-due? bearoff-solve!)
+(import backgammon/cube cube-double? cube-take?)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-throw
-  game-set-dice! game-play! game-undo! game-plays)
+  game-set-dice! game-play! game-undo! game-plays game-cube game-offered? game-to-roll? game-roll!
+  game-double! game-take! game-pass!)
 (import backgammon/show board-text)
 
 (def %help
@@ -36,6 +38,8 @@
           "  moves          every legal play of your roll"
           "  pips           both pip counts"
           "  dice DD        set your dice by hand (31, 66)"
+          "  roll, double   before your roll, when the cube is yours or in the middle"
+          "  take, pass     when you are doubled"
           "  undo           take back your last play"
           "  new            a new game"
           "  white, black   play that side against the engine"
@@ -89,13 +93,18 @@
         (fn (_ r) (Str8 append "  " (play-text (rest r)) "   " (%score-text (int- (first r) best)) "\n"))
         (List take 3 ranked)))))
 
-(def %result-text
+; A game's result R, (WINNER POINTS KIND), as a sentence without its
+; stop: "Black wins a gammon, 4 points".
+(def result-text
   (fn (_ r)
+    (def kind (List ref 2 r))
+    (def n (first (rest r)))
     (Str8 append (%name (first r)) " wins "
-      (match ((int= (first (rest r)) 3) "a backgammon, 3 points")
-             ((int= (first (rest r)) 2) "a gammon, 2 points")
-             (#t "1 point"))
-      ".\n")))
+      (match ((int= kind 3) "a backgammon, ") ((int= kind 2) "a gammon, ") (#t ""))
+      (if (int= n 1) "1 point" (Str8 append (io-display-to-str n) " points"))
+      (if (int= kind 0) (Str8 append ": " (%name (int- 1 (first r))) " passed the double") ""))))
+
+(def %result-text (fn (_ r) (Str8 append (result-text r) ".\n")))
 
 ; The side to move's play PL made, and said.
 (def %play!
@@ -157,6 +166,56 @@
              (do (%play! io st found "plays") #t)))
          (play-find (game-pos g) (first d) (first (rest d)) line))))))
 
+; --- the cube ---------------------------------------------------------------------
+
+(def %one-of? (fn (_ line words) (not (null? (List find (fn (_ w) (str=? w line)) words)))))
+
+(def %take! (fn (_ io g) (game-take! g) (%say io (Str8 append (%name (int- 1 (game-turn g))) " takes: the cube is at " (io-display-to-str (game-cube g)) ".\n"))))
+
+(def %pass!
+  (fn (_ io g)
+    (%say io (Str8 append (%name (int- 1 (game-turn g))) " passes.\n"))
+    (game-pass! g)
+    (%say io (%result-text (game-result g)))))
+
+(def %double! (fn (_ io g) (%say io (Str8 append (%name (game-turn g)) " doubles to " (io-display-to-str (int* 2 (game-cube g))) ".\n")) (game-double! g)))
+
+; LINE typed while the cube waits on a person, WORDS what answers it,
+; ANSWER! acting on one: #f to quit, else #t.  Commands that need no
+; dice still work.
+(def %cube-line
+  (fn (_ io st line words answer! hint)
+    (match
+      ((%one-of? line words) (do (answer! line) #t))
+      ((str=? line "hint") (do (%say io (Str8 append "Hint: " hint ".\n")) #t))
+      ((%one-of? line (list "quit" "exit" "help" "board" "pips" "undo" "new" "white" "black" "both" "none")) (%command io st line))
+      (#t (do (%say io (Str8 append (Str8 join " or " (List filter (fn (_ w) (int< 1 (str-byte-len w))) words)) "\n")) #t)))))
+
+; One step while the cube waits: the answer to a double, or the choice
+; to roll or double; the engine's, or read from a person.
+(def %cube-step
+  (fn (_ io st)
+    (def g (%get st %s-game))
+    (def cube (io-display-to-str (int* 2 (game-cube g))))
+    (if (game-offered? g)
+      (if (not (%human? st (int- 1 (game-turn g))))
+        (do (if (cube-take? g) (%take! io g) (%pass! io g)) #t)
+        ((fn (_ line)
+           (if (null? line) #f
+             (%cube-line io st (%trim line) (list "take" "t" "pass" "p" "drop")
+               (fn (_ w) (if (%one-of? w (list "take" "t")) (%take! io g) (%pass! io g)))
+               (if (cube-take? g) "take" "pass"))))
+         (%read io (Str8 append (%name (game-turn g)) " doubles to " cube ".  " (%name (int- 1 (game-turn g))) ": take or pass> "))))
+      (if (not (%human? st (game-turn g)))
+        (do (if (cube-double? g) (%double! io g) (game-roll! g)) #t)
+        ((fn (_ line)
+           (if (null? line) #f
+             (%cube-line io st (%trim line) (list "roll" "r" "" "double" "d")
+               (fn (_ w) (if (%one-of? w (list "double" "d")) (%double! io g) (game-roll! g)))
+               (if (cube-double? g) "double" "roll"))))
+         (%read io (Str8 append (board-text (game-pos g)) (%name (game-turn g)) " to roll, the cube at "
+                     (io-display-to-str (game-cube g)) ": roll or double> ")))))))
+
 ; One step of the session: #f when it is over.
 (def %step
   (fn (_ io st)
@@ -174,6 +233,7 @@
         (do (%say io "Solving the bear-off for this machine: about a minute, once.\n")
             (bearoff-solve!)
             #t))
+      ((if (game-offered? g) #t (game-to-roll? g)) (%cube-step io st))
       ((not (%human? st (game-turn g)))
         (do (%say io (Str8 append (%name (game-turn g)) " rolls " (%dice-text (game-dice g)) ".\n"))
             (%play! io st (eval-best (game-pos g) (first (game-dice g)) (first (rest (game-dice g)))) "plays")
@@ -195,4 +255,4 @@
     ((fn (self) (when (%step io st) (self))))
     0))
 
-(provide backgammon/play play-run side-word)
+(provide backgammon/play play-run side-word result-text)
