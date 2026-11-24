@@ -21,7 +21,8 @@
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-play! game-undo! game-plays
   game-cube game-owner game-offered? game-to-roll? game-may-double? game-roll! game-double! game-take! game-pass!)
 (import backgammon/cube cube-double? cube-take?)
-(import backgammon/play play-run play-tutorial)
+(import backgammon/play play-run)
+(import backgammon/record xgid-text xgid-game mat-text record-save!)
 (import backgammon/lesson lesson-count lesson-title lesson-lines lesson-ask lesson-cube? lesson-game lesson-judge
   lesson-judge-cube)
 
@@ -51,7 +52,7 @@
               ((fn (_ ls) (if (null? ls) () (do (Vector set! 0 (rest ls) in) (first ls)))) (Vector ref 0 in)))
             (fn (_ text) (Vector set! 0 (pair text (Vector ref 0 out)) out))))
     ((fn (_ status) (pair status (Str8 join "" (List reverse (Vector ref 0 out)))))
-     (if (eq? human (lit tutorial)) (play-tutorial io (Random sw seed)) (play-run io (Random sw seed) human)))))
+     (if (eq? human (lit tutorial)) (play-run io (Random sw seed) (lit white) "tutorial") (play-run io (Random sw seed) human "")))))
 
 ; #t when NEEDLE is in TEXT.
 (def spec-has? (fn (_ needle text) (not (null? (Str8 index-of needle text)))))
@@ -66,8 +67,8 @@
 (import x/tui/screen)
 (import x/tui/style)
 (import backgammon/board play-next play-after play-done step-die)
-(import backgammon/game game-at)
-(import backgammon/tui tui-make tui-game tui-game! tui-lesson! tui-quit? tui-message tui-last tui-done tui-score
+(import backgammon/game game-at game-set-dice! game-set-cube! game-past)
+(import backgammon/tui tui-make tui-game tui-game! tui-games tui-command! tui-lesson! tui-quit? tui-message tui-last tui-done tui-score
   tui-engine-to-move? tui-auto-play! tui-key! tui-draw! tui-events! tui-view tui-counts)
 
 (def spec-rows

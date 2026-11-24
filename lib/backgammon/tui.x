@@ -43,6 +43,7 @@
   game-take! game-pass!)
 (import backgammon/cube cube-double? cube-take?)
 (import backgammon/play side-word result-text)
+(import backgammon/record xgid-text xgid-game record-save!)
 (import backgammon/lesson lesson-count lesson-title lesson-lines lesson-ask lesson-cube? lesson-game lesson-judge
   lesson-judge-cube)
 
@@ -58,7 +59,8 @@
 ; what has happened since it was last asked, for a window to show: see
 ; tui-events!; the coach's word, whether it is on, and the hint shown;
 ; and in the tutorial the lesson's index, else (), whether its card is
-; shown, and whether it has been answered right.
+; shown, and whether it has been answered right; and the session's games
+; done with, oldest first, for a .mat file.
 
 (def %game 0)
 (def %rnd 1)
@@ -84,6 +86,7 @@
 (def %lesson 21)
 (def %card 22)
 (def %learned 23)
+(def %games 24)
 
 (def %get (fn (_ st i) (Vector ref i st)))
 (def %put! (fn (_ st i v) (Vector set! i v st)))
@@ -100,9 +103,24 @@
 
 (def %clear-play! (fn (_ st) (%put! st %sel ()) (%put! st %done ()) (%put! st %dests ()) (%put! st %hinted ())))
 
+; The game ST is playing kept among the session's, before another
+; replaces it: when it was not a lesson and has a play made.
+(def %keep-game!
+  (fn (_ st)
+    (def g (%get st %game))
+    (unless (if (null? g) #t (if (%lesson? st) #t (null? (game-past g))))
+      (%put! st %games (List append (%get st %games) (list g))))))
+
+; The session's games, oldest first, the one being played last.
+(def tui-games
+  (fn (_ st)
+    ((fn (_ g) (if (if (%lesson? st) #t (null? (game-past g))) (%get st %games) (List append (%get st %games) (list g))))
+     (%get st %game))))
+
 (def %new-game!
   (fn (_ st)
     (def g (game-new (%get st %rnd)))
+    (%keep-game! st)
     (%put! st %game g)
     (%put! st %lesson ())
     (%put! st %card #f)
@@ -120,7 +138,7 @@
 ; HUMAN: white, black, both or none.
 (def tui-make
   (fn (_ rnd human)
-    (def st (Vector make 24 ()))
+    (def st (Vector make 25 ()))
     (%put! st %rnd rnd)
     (%put! st %human human)
     (%put! st %view (if (eq? human (lit black)) BLACK WHITE))
@@ -140,8 +158,22 @@
 (def tui-done (fn (_ st) (%get st %done)))
 (def tui-score (fn (_ st) (%get st %score)))
 
-; ST playing game G from here: for a position set up by hand.
-(def tui-game! (fn (_ st g) (%put! st %game g) (%clear-play! st) (%put! st %scored ()) (%put! st %last "") (%put! st %msg "") (%put! st %coach "") (%event! st (list (lit jump))) (%roll-event! st) st))
+; ST playing game G from here: for a position set up by hand, out of
+; the tutorial.
+(def tui-game!
+  (fn (_ st g)
+    (%keep-game! st)
+    (%put! st %game g)
+    (%put! st %lesson ())
+    (%put! st %card #f)
+    (%clear-play! st)
+    (%put! st %scored ())
+    (%put! st %last "")
+    (%put! st %msg "")
+    (%put! st %coach "")
+    (%event! st (list (lit jump)))
+    (unless (null? (game-dice g)) (%roll-event! st))
+    st))
 
 ; --- the tutorial -----------------------------------------------------------------
 ;
@@ -156,6 +188,7 @@
 (def tui-lesson!
   (fn (_ st i)
     (def g (lesson-game i (%get st %rnd)))
+    (%keep-game! st)
     (%put! st %human (lit white))
     (%put! st %view WHITE)
     (%put! st %game g)
@@ -661,6 +694,14 @@
            (if (if (number? n) (if (int< 0 n) (not (int< lesson-count n)) #f) #f) (tui-lesson! st (int- n 1))
              (%put! st %msg (Str8 append "tutorial takes a lesson from 1 to " (%num lesson-count) ": tutorial 3"))))
          (if (null? (rest words)) 1 (%lesson-number (%2nd words)))))
+      ((str=? cmd "xgid")
+        (if (null? (rest words)) (%put! st %msg (xgid-text (%get st %game)))
+          ((fn (_ g) (if (str? g) (%put! st %msg (Str8 append "Not an XGID: " g "."))
+                       (do (tui-game! st g) (%put! st %msg "The position is set."))))
+           (xgid-game (%2nd words) (%get st %rnd)))))
+      ((str=? cmd "save")
+        (if (null? (rest words)) (%put! st %msg "save takes a file: save games.mat")
+          (%put! st %msg (record-save! (%2nd words) (tui-games st)))))
       ((str=? cmd "hint") (%hint! st))
       ((str=? cmd "coach") (%coach-toggle! st))
       ((str=? cmd "roll") (%cube-key! st "r"))
@@ -682,6 +723,10 @@
              (do (game-set-dice! (%get st %game) (first d) (%2nd d)) (%clear-play! st) (%put! st %msg "") (%event! st (list (lit jump))) (%roll-event! st))))
          (if (null? (rest words)) () (%dice-word (%2nd words)))))
       (#t (%put! st %msg (Str8 append "No such command: " cmd ".  ? lists them."))))))
+
+; LINE run as a command typed after ":", as a front starts a session:
+; "tutorial", "xgid ID".
+(def tui-command! (fn (_ st line) (%run-command! st line) st))
 
 ; The one-digit number S, or ().
 (def %lesson-number (fn (_ s) (if (int= (str-byte-len s) 1) ((fn (_ d) (if (if (int< -1 d) (int< d 10) #f) d ())) (int- (str-byte-ref s 0) 48)) ())))
@@ -1019,7 +1064,7 @@
         "c  the coach on or off"
         ":  a command: white, black, both, none, new,"
         "   dice 31, hint, coach, roll, double, take,"
-        "   pass, tutorial, quit"
+        "   pass, tutorial, xgid [ID], save FILE, quit"
         "?  these keys q  quit      Any key closes this."))
 
 ; The lines over the board, the keys or a lesson's card: () when none.
@@ -1102,5 +1147,5 @@
 (def tui-human? (fn (_ st side) (%human? st side)))
 
 (provide backgammon/tui
-  tui-make tui-game tui-game! tui-lesson! tui-quit? tui-message tui-last tui-done tui-score
+  tui-make tui-game tui-game! tui-games tui-lesson! tui-command! tui-quit? tui-message tui-last tui-done tui-score
   tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-draw! tui-events! tui-view tui-counts tui-human?)
