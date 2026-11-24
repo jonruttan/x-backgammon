@@ -14,8 +14,10 @@
 (import backgammon/board BAR CHECKERS WHITE BLACK pos-me pos-opp pos-turn pos-make pos-start
   pos-swap pos-me-off pos-opp-off pos-me-pips pos-opp-pips pos-over? plays rolls perft play-text play-find)
 (import backgammon/show board-lines board-text)
-(import backgammon/eval evaluate eval-parts eval-contact? eval-ranked eval-best)
+(import backgammon/eval evaluate eval-parts eval-fine eval-contact? eval-ranked eval-best)
 (import backgammon/coach coach-judge)
+(import backgammon/bearoff BEAROFF-ONE BEAROFF-ROLL bearoff-make bearoff-rank bearoff-size bearoff-mean bearoff-chance bearoff-win
+  bearoff-write! bearoff-read bearoff-use! bearoff-due? bearoff-table bearoff-solve! bearoff-path)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-play! game-undo! game-plays)
 (import backgammon/play play-run)
 
@@ -103,3 +105,12 @@
 ; word; and what the view holds at KEY.
 (def spec-view (fn (_ st key) (rest (Assoc find key (tui-view st)))))
 (def spec-note (fn (_ st) (spec-view st (lit msg))))
+
+; --- the bear-off -----------------------------------------------------------------
+;
+; Specs go without this machine's table, a race counted in pips, unless
+; a case puts one in use.
+(bearoff-use! ())
+;
+; The rank in T of the position whose counts, from the 1-point up, are CS.
+(def spec-rank (fn (_ t cs) (bearoff-rank t (fn (_ k) (List ref k cs)))))

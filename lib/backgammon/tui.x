@@ -35,7 +35,8 @@
 (import x/core/doors int+ int- int* int/ int% int< int= io-display-to-str str-byte-len str-byte-ref str-byte-sub)
 (import backgammon/board WHITE BLACK BAR pos-me pos-opp pos-turn pos-me-off pos-opp-off pos-me-pips pos-opp-pips
   step-die play-text play-find play-after play-next play-done)
-(import backgammon/eval eval-ranked eval-best)
+(import backgammon/eval eval-ranked eval-best eval-contact?)
+(import backgammon/bearoff bearoff-due? bearoff-solve!)
 (import backgammon/coach coach-judge)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-set-dice!
   game-play! game-undo! game-plays)
@@ -221,6 +222,18 @@
     (if (%human? st (game-turn g))
       ((fn (_ pl) (%commit! st pl (if (null? (first pl)) "cannot move" "had to play") #f)) (first (game-plays g)))
       (%commit! st (eval-best (game-pos g) (first d) (%2nd d)) "played" #f))))
+
+; The bear-off is solved once on a machine, when a game first gets to a
+; race: due while there is no table and the sides are past each other.
+; The front shows the note, then solves.
+(def tui-solve-due?
+  (fn (_ st)
+    (def g (%get st %game))
+    (if (game-over? g) #f (if (eval-contact? (game-pos g)) #f (bearoff-due?)))))
+
+(def tui-solve-note! (fn (_ st) (%put! st %msg "Solving the bear-off for this machine: about a minute, once.")))
+
+(def tui-solve! (fn (_ st) (bearoff-solve!) (%put! st %msg "The bear-off is solved: the engine bears off by the table.")))
 
 ; The places, as the viewer counts them: 1 to 24 its points, 25 the bar
 ; and 0 the tray.  As the side to move's index: BAR, -1 for off, or the
@@ -848,4 +861,4 @@
 
 (provide backgammon/tui
   tui-make tui-game tui-game! tui-quit? tui-message tui-last tui-done tui-score
-  tui-engine-to-move? tui-auto-play! tui-key! tui-draw! tui-events! tui-view tui-counts tui-human?)
+  tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-draw! tui-events! tui-view tui-counts tui-human?)

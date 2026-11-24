@@ -20,7 +20,7 @@
 (import x/repl/term)
 (import x/tui/screen)
 (import x/core/doors io-display-to-str)
-(import backgammon/tui tui-make tui-quit? tui-engine-to-move? tui-auto-play! tui-key! tui-draw! tui-events!)
+(import backgammon/tui tui-make tui-quit? tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-draw! tui-events!)
 
 (def %esc (fn (_ text) (Str8 append "\x1b" text)))
 
@@ -111,6 +111,8 @@
     (Heap collect)
     (match
       ((tui-quit? st) ())
+      ((tui-solve-due? st)
+        (do (tui-solve-note! st) (%show! st screen) (tui-solve! st) (self st screen reader)))
       ((tui-engine-to-move? st)
         (do (if (%waiting? reader %pause) (%act! st (%key reader)) (tui-auto-play! st))
             (self st screen reader)))

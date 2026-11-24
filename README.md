@@ -136,6 +136,17 @@ counts' difference; before that it adds what the points held are worth
 checkers on the bar, and the risk to each blot: the rolls out of 36
 that hit it, times the pips a hit costs.
 
+A side with only its home board left counts its race from the
+bear-off table: for every way of setting up to 15 checkers on the six
+home points, the chances of bearing them all off in each number of
+rolls, the best play of every roll taken.  Its rolls to come count at
+49/6 pips a roll, to a fraction of a pip, so the engine bears off the
+way that leaves the fewest rolls.  The table is solved once on a
+machine, the first time a game gets to a race, which takes about a
+minute and says so, and is kept in `$XDG_CACHE_HOME/x-backgammon/`
+(`~/.cache/x-backgammon/` without it).  Until then a race is counted in
+pips.
+
 ## The rules played
 
 Every roll is played with as many dice as can be used.  When only one
