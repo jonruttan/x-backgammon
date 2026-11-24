@@ -14,7 +14,7 @@
 (module backgammon/coach)
 
 (import backgammon/board pos-key play-text)
-(import backgammon/eval eval-ranked eval-parts)
+(import backgammon/eval eval-ranked eval-parts eval-fine)
 (import x/core/doors int- int< io-display-to-str)
 
 ; Why a play better by DIFF in the part NAME is better.
@@ -39,7 +39,8 @@
 
 ; What the coach says of PLAY made from P with D1 D2: (LOSS . TEXT),
 ; LOSS the pips the engine's play scores above it, 0 when it is the
-; engine's play or one as good.  () when the roll has one play.
+; engine's play or one as good, and "a little better" when the engine's
+; is ahead by less than a pip.  () when the roll has one play.
 (def coach-judge
   (fn (_ p d1 d2 play)
     (def ranked (eval-ranked p d1 d2))
@@ -47,9 +48,10 @@
     (def mine (List find (fn (_ r) (str=? (pos-key (rest (rest r))) key)) ranked))
     (if (if (null? (rest ranked)) #t (null? mine)) ()
       ((fn (_ best loss)
-         (if (int< loss 1) (pair 0 "Coach: the engine plays that too.")
+         (if (not (int< (eval-fine (rest play)) (eval-fine (rest (rest best))))) (pair 0 "Coach: the engine plays that too.")
            (pair loss
-             (Str8 append "Coach: " (play-text (rest best)) " is better by " (io-display-to-str loss) ": "
+             (Str8 append "Coach: " (play-text (rest best))
+               (if (int< loss 1) " is a little better: " (Str8 append " is better by " (io-display-to-str loss) ": "))
                (%why (%reason (eval-parts (rest (rest best))) (eval-parts (rest play)))) "."))))
        (first ranked) (int- (first (first ranked)) (first mine))))))
 

@@ -17,6 +17,7 @@
 (module backgammon/eval)
 
 (import backgammon/board BAR pos-me pos-opp pos-me-pips pos-opp-pips plays)
+(import backgammon/bearoff BEAROFF-ROLL bearoff-table bearoff-max bearoff-rank bearoff-mean)
 (import x/core/doors int+ int- int* int/ int< int=)
 
 ; The other side's index J, as a place on this side's board: K = 23 - J,
@@ -98,16 +99,45 @@
 
 (def %total (fn (_ ns) (List fold (fn (_ a b) (int+ a b)) 0 ns)))
 
+; --- the race ------------------------------------------------------------------------
+
+; The race is counted in 1/64 pips.  A side with only its home board left
+; counts its rolls to come from the bear-off table (backgammon/bearoff)
+; at 49/6 pips a roll, the pips an average roll moves; a side with
+; checkers further out, or with no table on this machine, counts its pips.
+(def %fine 64)
+
+; The checkers on the side's home board that COUNT reads, or -1 when it
+; has one further out.
+(def %home
+  (fn (_ count)
+    ((fn (self i n) (if (int< i 0) n (if (int< i 6) (self (int- i 1) (int+ n (count i))) (if (int< 0 (count i)) -1 (self (int- i 1) n)))))
+     BAR 0)))
+
+; The side's race in 1/64 pips: COUNT reads its checkers, PIPS its pips.
+(def %race-of
+  (fn (_ count pips)
+    ((fn (_ t n)
+       (if (if (null? t) #t (if (int< n 0) #t (int< (bearoff-max t) n))) (int* pips %fine)
+         (int/ (int* (bearoff-mean t (bearoff-rank t count)) 49) (int/ (int* 6 BEAROFF-ROLL) %fine))))
+     (bearoff-table) (%home count))))
+
+; P's race in 1/64 pips for the side that has just played.
+(def %race
+  (fn (_ p)
+    (int- (%race-of (fn (_ j) (pos-opp p j)) (pos-opp-pips p))
+          (%race-of (fn (_ i) (pos-me p i)) (pos-me-pips p)))))
+
 ; P's score for the side that has just played, in its parts, as
 ; ((NAME . PIPS) ...): race the pip counts' difference; points the made
 ; points' worth against the other side's; prime the longest runs of made
 ; points; hit the other side's checkers on the bar; bar this side's on
 ; the bar; risk the shots at this side's blots.  Out of contact there is
-; only the race.
+; only the race, a bear-off's counted from the table.
 (def eval-parts
   (fn (_ p)
     (def race (int- (pos-opp-pips p) (pos-me-pips p)))
-    (if (not (eval-contact? p)) (list (pair (lit race) race))
+    (if (not (eval-contact? p)) (list (pair (lit race) (int/ (%race p) %fine)))
       ((fn (_ mine theirs)
          (list (pair (lit race) race)
                (pair (lit points) (int- (first mine) (first theirs)))
@@ -121,13 +151,21 @@
 ; P scored for the side that has just played: its parts' sum.
 (def evaluate (fn (_ p) (%total (List map rest (eval-parts p)))))
 
-; The plays of D1 D2 from P, each as (SCORE . PLAY), the best first.
+; P's score in 1/64 pips, what plays are ranked by: in contact its
+; score, out of contact its race, a bear-off's rolls told apart to a
+; fraction of a pip.
+(def eval-fine
+  (fn (_ p) (if (eval-contact? p) (int* (evaluate p) %fine) (%race p))))
+
+; The plays of D1 D2 from P, each as (SCORE . PLAY), the best first by
+; eval-fine.
 (def eval-ranked
   (fn (_ p d1 d2)
-    (List sort (fn (_ a b) (int< (first b) (first a)))
-      (List map (fn (_ pl) (pair (evaluate (rest pl)) pl)) (plays p d1 d2)))))
+    (List map rest
+      (List sort (fn (_ a b) (int< (first b) (first a)))
+        (List map (fn (_ pl) (pair (eval-fine (rest pl)) (pair (evaluate (rest pl)) pl))) (plays p d1 d2))))))
 
 ; The play the engine picks for D1 D2 from P.
 (def eval-best (fn (_ p d1 d2) (rest (first (eval-ranked p d1 d2)))))
 
-(provide backgammon/eval evaluate eval-parts eval-contact? eval-ranked eval-best)
+(provide backgammon/eval evaluate eval-parts eval-fine eval-contact? eval-ranked eval-best)

@@ -30,7 +30,7 @@
 (import x/type/vector)
 (import x/core/doors int& int+ int- int* int/ int% int< int=)
 (import backgammon/board BAR pos-me pos-me-off pos-turn)
-(import backgammon/tui tui-make tui-quit? tui-engine-to-move? tui-auto-play! tui-key! tui-events! tui-view tui-counts)
+(import backgammon/tui tui-make tui-quit? tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-events! tui-view tui-counts)
 (import backgammon/gui gui-make gui-draw! gui-at gui-spot gui-dice-x gui-canvas gui-width gui-height)
 (import backgammon/sound sound-make sound-play! sound-close!)
 
@@ -280,6 +280,8 @@
         (do ((fn (_ left) (when (int< 0 left) (Sys usleep (int* 1000 left)))) (int- %frame-ms (int- now (%get w %drawn))))
             (%frame! w (%ms))
             (self w)))
+      ((tui-solve-due? st)
+        (do (tui-solve-note! st) (%frame! w (%ms)) (tui-solve! st) (Heap collect) (%put! w %dirty #t) (self w)))
       ((if (tui-engine-to-move? st) (int< %engine-wait (int- now (%get w %quiet))) #f)
         (do (tui-auto-play! st) (Heap collect) (%put! w %dirty #t) (self w)))
       (#t (do (%collect! w now) (Sys usleep 8000) (self w))))))
