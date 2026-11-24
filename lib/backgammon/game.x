@@ -115,6 +115,15 @@
           (Vector set! %g-dice (if (game-may-double? g (pos-turn (pos-swap after))) () (game-throw g)) g)))
     g))
 
+; G's cube set: its VALUE, its OWNER, () for the middle, and whether a
+; double is OFFERED, as when a position is read.
+(def game-set-cube!
+  (fn (_ g value owner offered)
+    (Vector set! %g-cube value g)
+    (Vector set! %g-owner owner g)
+    (Vector set! %g-offered offered g)
+    g))
+
 ; G with the side to move's dice thrown.
 (def game-roll! (fn (_ g) (Vector set! %g-dice (game-throw g) g) g))
 
@@ -165,5 +174,5 @@
 
 (provide backgammon/game
   CUBE-MAX game-pos game-dice game-past game-result game-over? game-turn game-cube game-owner game-offered?
-  game-to-roll? game-may-double? game-throw game-new game-at game-set-dice! game-play! game-roll! game-double!
+  game-to-roll? game-may-double? game-throw game-new game-at game-set-dice! game-set-cube! game-play! game-roll! game-double!
   game-take! game-pass! game-undo! game-plays)

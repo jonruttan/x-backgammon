@@ -11,6 +11,7 @@ x -l backgammon -- play
 x -l backgammon -- play --side black --seed 7
 x -l backgammon -- play --window
 x -l backgammon -- play --tutorial
+x -l backgammon -- play --xgid XGID=-b----E-C---eE---c-e----B-:0:0:1:00:0:0:0:0:6
 x -l backgammon -- --board
 x -l backgammon -- --roll 31
 x -l backgammon -- --perft 1
@@ -21,7 +22,8 @@ terminal, or in a window with `--window` or `--web` (below).  `--side`
 is the side you play, white (the default), black, both, or none to
 watch the engine play itself.  The dice are drawn from a seed, printed
 at the start when `--seed N` does not give one, so a game can be
-played again.  `--tutorial` starts with the lessons (below).
+played again.  `--tutorial` starts with the lessons, and `--xgid ID`
+from a position (both below).
 `--board` prints the starting board.  `--roll DD` prints every legal
 play of the roll from the start, one a line, and how many on standard
 error.  `--perft N` counts the plays over N turns, each of the 21 rolls
@@ -60,6 +62,8 @@ Anything else is a command:
     white, black   play that side against the engine
     both, none     play both sides, or watch the engine play both
     tutorial       the lessons, then a game as white
+    xgid [ID]      the position as an XGID, or play from one
+    save FILE      the session's games as a .mat file
     help, quit
 
 A game won with the loser having borne off none is a gammon, 2 points;
@@ -106,6 +110,22 @@ lesson, or after the last to a game against the engine.  The command
 a time, the card is printed and the answer read; `hint`, `lesson` (the
 card again), `next` and `quit` work there.
 
+## Positions and records
+
+A position is written as an XGID, the form eXtreme Gammon and GNU
+Backgammon read: `xgid` shows the one on the board, `xgid ID` plays on
+from one, and `--xgid ID` starts there.  White is the player at the
+bottom.  The cube, its owner, the side to move and a double waiting
+are read and written; only money positions are played, so the match
+length must be 0.
+
+`save FILE` writes the session's games as a .mat file, a money
+session's games laid out as GNU Backgammon exports them, for it or
+another program to replay and analyse: each game numbered, the points
+before it, the rolls and plays a pair of turns a line, white's on the
+left, and the cube's doubles, takes and drops.  Only games played from
+the start are written; a lesson or a position set by hand is not.
+
 ## On the board
 
 On a terminal `play` fills it with the board: the points in two rows of
@@ -134,7 +154,7 @@ play, waits a moment so it can be watched.
     v              turn the board
     :              a command: white, black, both, none, dice DD, new,
                    hint, coach, roll, double, take, pass, tutorial,
-                   quit
+                   xgid [ID], save FILE, quit
     ?              the keys
     q              quit
 

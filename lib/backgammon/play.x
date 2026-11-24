@@ -25,8 +25,9 @@
 (import backgammon/cube cube-double? cube-take?)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-throw
   game-set-dice! game-play! game-undo! game-plays game-cube game-offered? game-to-roll? game-roll!
-  game-double! game-take! game-pass!)
+  game-double! game-take! game-pass! game-past)
 (import backgammon/show board-text)
+(import backgammon/record xgid-text xgid-game record-save!)
 (import backgammon/lesson lesson-count lesson-title lesson-lines lesson-ask lesson-cube? lesson-game lesson-judge
   lesson-judge-cube)
 
@@ -47,14 +48,18 @@
           "  white, black   play that side against the engine"
           "  both, none     play both sides, or watch the engine play both"
           "  tutorial       the lessons, then a game as white"
+          "  xgid [ID]      the position as an XGID, or play from one"
+          "  save FILE      the session's games as a .mat file"
           "  help, quit"
           "")))
 
-; The session: a Vector of the game, the dice's source, and who the
-; people play: white, black, both or none.
+; The session: a Vector of the game, the dice's source, who the people
+; play, white, black, both or none, and the games done with, oldest
+; first.
 (def %s-game 0)
 (def %s-rnd 1)
 (def %s-human 2)
+(def %s-games 3)
 
 (def %get (fn (_ st i) (Vector ref i st)))
 (def %put! (fn (_ st i v) (Vector set! i v st)))
@@ -77,9 +82,19 @@
     ((fn (_ h) (match ((eq? h (lit both)) #t) ((eq? h (lit none)) #f) ((eq? h (lit white)) (int= side WHITE)) (#t (int= side BLACK))))
      (%get st %s-human))))
 
+; The game being played kept among the session's when it has a play.
+(def %keep-game!
+  (fn (_ st) ((fn (_ g) (unless (if (null? g) #t (null? (game-past g))) (%put! st %s-games (List append (%get st %s-games) (list g)))))
+              (%get st %s-game))))
+
+; The session's games, oldest first, the one being played last.
+(def %games
+  (fn (_ st) ((fn (_ g) (if (null? (game-past g)) (%get st %s-games) (List append (%get st %s-games) (list g)))) (%get st %s-game))))
+
 (def %new-game!
   (fn (_ io st)
     (def g (game-new (%get st %s-rnd)))
+    (%keep-game! st)
     (%put! st %s-game g)
     (%say io (Str8 append "White rolls " (io-display-to-str (first (game-dice g)))
                ", Black rolls " (io-display-to-str (first (rest (game-dice g))))
@@ -161,6 +176,15 @@
       ((str=? line "undo")
         (do (unless (game-undo! g (fn (_ side) (%human? st side))) (%say io "nothing of yours to take back\n")) #t))
       ((str=? line "new") (do (%new-game! io st) #t))
+      ((str=? line "xgid") (do (%say io (Str8 append (xgid-text g) "\n")) #t))
+      ((%starts? line "xgid ")
+        ((fn (_ ng)
+           (if (str? ng) (%say io (Str8 append "Not an XGID: " ng ".\n"))
+             (do (%keep-game! st) (%put! st %s-game ng)))
+           #t)
+         (xgid-game (%trim (str-byte-sub line 5 (int- (str-byte-len line) 5))) (%get st %s-rnd))))
+      ((%starts? line "save ")
+        (do (%say io (Str8 append (record-save! (%trim (str-byte-sub line 5 (int- (str-byte-len line) 5))) (%games st)) "\n")) #t))
       ((str=? line "tutorial") (if (%tutorial! io st) (do (%new-game! io st) #t) #f))
       ((List includes? line (list "white" "black" "both" "none"))
         (do (%put! st %s-human (side-word line)) #t))
@@ -192,7 +216,8 @@
     (match
       ((%one-of? line words) (do (answer! line) #t))
       ((str=? line "hint") (do (%say io (Str8 append "Hint: " hint ".\n")) #t))
-      ((%one-of? line (list "quit" "exit" "help" "board" "pips" "undo" "new" "white" "black" "both" "none")) (%command io st line))
+      ((%one-of? line (list "quit" "exit" "help" "board" "pips" "undo" "new" "white" "black" "both" "none" "xgid")) (%command io st line))
+      ((if (%starts? line "xgid ") #t (%starts? line "save ")) (%command io st line))
       (#t (do (%say io (Str8 append (Str8 join " or " (List filter (fn (_ w) (int< 1 (str-byte-len w))) words)) "\n")) #t)))))
 
 ; One step while the cube waits: the answer to a double, or the choice
@@ -315,17 +340,13 @@
 ; The session ST played until it is over: the exit status.
 (def %session (fn (_ io st) ((fn (self) (when (%step io st) (self)))) 0))
 
-; A session on IO with the dice from RND, the people playing HUMAN.
+; A session on IO with the dice from RND, the people playing HUMAN; START,
+; when not "", a command run first, as "tutorial" or "xgid ID".
 (def play-run
-  (fn (_ io rnd human)
-    (def st (Vector of () rnd human))
-    (%new-game! io st)
-    (%session io st)))
+  (fn (_ io rnd human start)
+    (def st (Vector of () rnd human ()))
+    (if (str=? start "") (do (%new-game! io st) (%session io st))
+      (do (%put! st %s-game (game-new rnd))
+          (if (%command io st start) (%session io st) 0)))))
 
-; The tutorial on IO, then a session as white, the dice from RND.
-(def play-tutorial
-  (fn (_ io rnd)
-    (def st (Vector of () rnd (lit white)))
-    (if (%tutorial! io st) (do (%new-game! io st) (%session io st)) 0)))
-
-(provide backgammon/play play-run play-tutorial side-word result-text)
+(provide backgammon/play play-run side-word result-text)

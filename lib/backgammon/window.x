@@ -30,7 +30,7 @@
 (import x/type/vector)
 (import x/core/doors int& int+ int- int* int/ int% int< int=)
 (import backgammon/board BAR pos-me pos-me-off pos-turn)
-(import backgammon/tui tui-make tui-lesson! tui-quit? tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-events! tui-view tui-counts)
+(import backgammon/tui tui-make tui-command! tui-quit? tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-events! tui-view tui-counts)
 (import backgammon/gui gui-make gui-draw! gui-at gui-spot gui-dice-x gui-canvas gui-width gui-height)
 (import backgammon/sound sound-make sound-play! sound-close!)
 
@@ -287,14 +287,14 @@
       (#t (do (%collect! w now) (Sys usleep 8000) (self w))))))
 
 ; Play in a window drawn through FRONT, Sdl or Web, the dice from RND,
-; the people playing HUMAN, from the tutorial's first lesson when
-; TUTORIAL: () when it was left, or what went wrong.
+; the people playing HUMAN, the command START run first when it is not
+; "": () when it was left, or what went wrong.
 (def window-run
-  (fn (_ front rnd human tutorial)
+  (fn (_ front rnd human start)
     (when (eq? front Sdl) (Sdl hint! "SDL_VIDEO_MAC_FULLSCREEN_SPACES" "0"))
     (def w (Vector make %slots ()))
     (%put! w %front front)
-    (%put! w %st ((fn (_ st) (when tutorial (tui-lesson! st 0)) st) (tui-make rnd human)))
+    (%put! w %st ((fn (_ st) (unless (str=? start "") (tui-command! st start)) st) (tui-make rnd human)))
     (%put! w %gui (gui-make))
     (%put! w %dirty #t)
     (%put! w %drawn 0)
