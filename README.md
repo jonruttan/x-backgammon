@@ -10,6 +10,7 @@ turns that checks the move generator as perft checks a chess engine's.
 x -l backgammon -- play
 x -l backgammon -- play --side black --seed 7
 x -l backgammon -- play --window
+x -l backgammon -- play --tutorial
 x -l backgammon -- --board
 x -l backgammon -- --roll 31
 x -l backgammon -- --perft 1
@@ -20,10 +21,11 @@ terminal, or in a window with `--window` or `--web` (below).  `--side`
 is the side you play, white (the default), black, both, or none to
 watch the engine play itself.  The dice are drawn from a seed, printed
 at the start when `--seed N` does not give one, so a game can be
-played again.  `--board` prints the starting board.  `--roll DD` prints
-every legal play of the roll from the start, one a line, and how many
-on standard error.  `--perft N` counts the plays over N turns, each of
-the 21 rolls once a turn.
+played again.  `--tutorial` starts with the lessons (below).
+`--board` prints the starting board.  `--roll DD` prints every legal
+play of the roll from the start, one a line, and how many on standard
+error.  `--perft N` counts the plays over N turns, each of the 21 rolls
+once a turn.
 
 ## Playing
 
@@ -57,6 +59,7 @@ Anything else is a command:
     new            a new game
     white, black   play that side against the engine
     both, none     play both sides, or watch the engine play both
+    tutorial       the lessons, then a game as white
     help, quit
 
 A game won with the loser having borne off none is a gammon, 2 points;
@@ -86,6 +89,23 @@ doubles when its count is at most 4 ahead of the other's (3 to
 redouble), and takes when the doubler's count is at least 2 ahead.
 `h` before a roll, or when doubled, says what the engine would do.
 
+## The tutorial
+
+Eight lessons, played as white: moving, hitting, the bar, making
+points, blots and safety, primes, bearing off, and the cube.  Each sets
+up a position and a roll, says the idea in a few lines, and asks for a
+play, or in the last a take or a pass of a double.  The engine judges
+the answer as the coach does: its own play is right, and so is one it
+prefers by less than a pip; any other is taken back, with the play the
+engine prefers and why, to try again.
+
+On the board the lesson's card is shown first, any key closing it; `?`
+shows it again, `h` gives the best plays, and `n` goes to the next
+lesson, or after the last to a game against the engine.  The command
+`tutorial N` starts at lesson N; `new` leaves the tutorial.  A line at
+a time, the card is printed and the answer read; `hint`, `lesson` (the
+card again), `next` and `quit` work there.
+
 ## On the board
 
 On a terminal `play` fills it with the board: the points in two rows of
@@ -113,7 +133,8 @@ play, waits a moment so it can be watched.
     n              a new game; the points won are counted
     v              turn the board
     :              a command: white, black, both, none, dice DD, new,
-                   hint, coach, roll, double, take, pass, quit
+                   hint, coach, roll, double, take, pass, tutorial,
+                   quit
     ?              the keys
     q              quit
 

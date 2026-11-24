@@ -43,6 +43,8 @@
   game-take! game-pass!)
 (import backgammon/cube cube-double? cube-take?)
 (import backgammon/play side-word result-text)
+(import backgammon/lesson lesson-count lesson-title lesson-lines lesson-ask lesson-cube? lesson-game lesson-judge
+  lesson-judge-cube)
 
 ; --- the state --------------------------------------------------------------------
 ;
@@ -54,7 +56,9 @@
 ; keys shown; quit; what was last played; the layout last drawn, (WIDTH
 ; X0); the games won, (WHITE . BLACK); the result counted in them; and
 ; what has happened since it was last asked, for a window to show: see
-; tui-events!.
+; tui-events!; the coach's word, whether it is on, and the hint shown;
+; and in the tutorial the lesson's index, else (), whether its card is
+; shown, and whether it has been answered right.
 
 (def %game 0)
 (def %rnd 1)
@@ -77,6 +81,9 @@
 (def %coach 18)
 (def %coaching 19)
 (def %hinted 20)
+(def %lesson 21)
+(def %card 22)
+(def %learned 23)
 
 (def %get (fn (_ st i) (Vector ref i st)))
 (def %put! (fn (_ st i v) (Vector set! i v st)))
@@ -97,6 +104,8 @@
   (fn (_ st)
     (def g (game-new (%get st %rnd)))
     (%put! st %game g)
+    (%put! st %lesson ())
+    (%put! st %card #f)
     (%clear-play! st)
     (%put! st %coach "")
     (%put! st %scored ())
@@ -111,7 +120,7 @@
 ; HUMAN: white, black, both or none.
 (def tui-make
   (fn (_ rnd human)
-    (def st (Vector make 21 ()))
+    (def st (Vector make 24 ()))
     (%put! st %rnd rnd)
     (%put! st %human human)
     (%put! st %view (if (eq? human (lit black)) BLACK WHITE))
@@ -134,6 +143,58 @@
 ; ST playing game G from here: for a position set up by hand.
 (def tui-game! (fn (_ st g) (%put! st %game g) (%clear-play! st) (%put! st %scored ()) (%put! st %last "") (%put! st %msg "") (%put! st %coach "") (%event! st (list (lit jump))) (%roll-event! st) st))
 
+; --- the tutorial -----------------------------------------------------------------
+;
+; A lesson is played as white against nothing: its card is shown, then
+; the play asked for is judged before it is made.  A wrong play is taken
+; back to try again; once it is right the lesson waits for n, the next.
+; The tutorial is left by a new game.
+
+(def %lesson? (fn (_ st) (not (null? (%get st %lesson)))))
+
+; ST at lesson I of the tutorial, counted from 0.
+(def tui-lesson!
+  (fn (_ st i)
+    (def g (lesson-game i (%get st %rnd)))
+    (%put! st %human (lit white))
+    (%put! st %view WHITE)
+    (%put! st %game g)
+    (%put! st %lesson i)
+    (%put! st %card #t)
+    (%put! st %learned #f)
+    (%clear-play! st)
+    (%put! st %scored ())
+    (%put! st %last (lesson-ask i))
+    (%put! st %msg "")
+    (%put! st %coach "")
+    (%event! st (list (lit jump)))
+    (unless (null? (game-dice g)) (%roll-event! st))
+    st))
+
+; The lesson after this one, or a game once the last is done.
+(def %next-lesson!
+  (fn (_ st)
+    ((fn (_ i)
+       (if (int< i lesson-count) (tui-lesson! st i)
+         (do (%new-game! st) (%put! st %msg "That is the tutorial.  A game against the engine is on."))))
+     (int+ 1 (%get st %lesson)))))
+
+; The lesson's answer, RIGHT, said as TEXT: a right one ends the lesson.
+(def %answered!
+  (fn (_ st right text)
+    (when right (%put! st %learned #t))
+    (%put! st %msg (Str8 append text (if right "  n goes on." "  Try again: h shows the best.")))))
+
+; Whether the lesson in ST is still to be answered.
+(def %asking? (fn (_ st) (if (%lesson? st) (not (%get st %learned)) #f)))
+
+; The card of lesson I: its title, what it says, what it asks, and the keys.
+(def %card-lines
+  (fn (_ i)
+    (List append (list (lesson-title i) "") (lesson-lines i)
+      (list "" (lesson-ask i) "" "h  the best plays   n  the next lesson"
+            "?  this card again  Any key closes it."))))
+
 ; --- plays ------------------------------------------------------------------------
 
 (def %result-text (fn (_ r) (Str8 append (result-text r) ".  n starts the next game.")))
@@ -151,18 +212,29 @@
 ; each already an event.
 (def %commit!
   (fn (_ st pl how shown)
+    (if (%asking? st)
+      ((fn (_ j)
+         (%answered! st (first j) (rest j))
+         (if (first j) (%made! st pl how shown)
+           (do (%clear-play! st) (%event! st (list (lit jump))))))
+       (lesson-judge (%get st %game) pl))
+      (%made! st pl how shown))))
+
+(def %made!
+  (fn (_ st pl how shown)
     (def g (%get st %game))
+    (def said (if (%lesson? st) (%get st %msg) ""))
     (def text
       (Str8 append (%name (game-turn g)) " rolled " (%dice-text (game-dice g)) " and " how
         (if (null? (first pl)) "" (Str8 append " " (play-text pl))) "."))
     (unless shown (%step-events! st (game-pos g) (game-dice g) (first pl) ()))
-    (when (if (%get st %coaching) (%human? st (game-turn g)) #f)
+    (when (if (%get st %coaching) (if (%human? st (game-turn g)) (not (%lesson? st)) #f) #f)
       ((fn (_ j) (%put! st %coach (if (null? j) "" (rest j))))
        (coach-judge (game-pos g) (first (game-dice g)) (%2nd (game-dice g)) pl)))
     (game-play! g pl)
     (%clear-play! st)
     (%put! st %last text)
-    (%put! st %msg "")
+    (%put! st %msg said)
     (%next! st)
     (Heap collect)))
 
@@ -172,6 +244,7 @@
   (fn (_ st)
     (def g (%get st %game))
     (match
+      ((%lesson? st) (unless (if (game-over? g) #t (null? (game-dice g))) (%roll-event! st)))
       ((game-over? g)
         (do (%count! st (game-result g) 1)
             (%put! st %scored (game-result g))
@@ -251,6 +324,11 @@
                  (#t "Roll or double first: r rolls, d doubles."))))
       ((str=? key "r") (%roll! st))
       ((str=? key "d") (%double! st))
+      ((%asking? st)
+        ((fn (_ j)
+           (when (first j) (if (str=? key "t") (%take! st) (%pass! st)))
+           (%answered! st (first j) (rest j)))
+         (lesson-judge-cube g (str=? key "t"))))
       ((str=? key "t") (%take! st))
       (#t (%pass! st)))))
 
@@ -324,6 +402,7 @@
     (def cube (%cube-side st))
     (match
       ((game-over? g) #f)
+      ((%lesson? st) #f)
       ((not (null? cube)) (not (%human? st cube)))
       ((not (%human? st (game-turn g))) #t)
       ((null? (%get st %done)) (int< (List length (game-plays g)) 2))
@@ -461,6 +540,7 @@
     (match
       ((not (null? (%get st %done)))
         (do (%put! st %done (List init (%get st %done))) (%put! st %sel ()) (%put! st %dests ()) (%put! st %msg "") (%event! st (list (lit jump)))))
+      ((%lesson? st) (%put! st %msg "A lesson's play is not taken back: n goes on, ? shows the lesson."))
       ((game-undo! g (fn (_ side) (%human? st side)))
         (do (unless (null? (%get st %scored)) (%count! st (%get st %scored) -1))
             (%clear-play! st)
@@ -576,6 +656,11 @@
       ((str=? cmd "") ())
       ((if (str=? cmd "q") #t (str=? cmd "quit")) (%put! st %quit #t))
       ((str=? cmd "new") (%new-game! st))
+      ((str=? cmd "tutorial")
+        ((fn (_ n)
+           (if (if (number? n) (if (int< 0 n) (not (int< lesson-count n)) #f) #f) (tui-lesson! st (int- n 1))
+             (%put! st %msg (Str8 append "tutorial takes a lesson from 1 to " (%num lesson-count) ": tutorial 3"))))
+         (if (null? (rest words)) 1 (%lesson-number (%2nd words)))))
       ((str=? cmd "hint") (%hint! st))
       ((str=? cmd "coach") (%coach-toggle! st))
       ((str=? cmd "roll") (%cube-key! st "r"))
@@ -597,6 +682,9 @@
              (do (game-set-dice! (%get st %game) (first d) (%2nd d)) (%clear-play! st) (%put! st %msg "") (%event! st (list (lit jump))) (%roll-event! st))))
          (if (null? (rest words)) () (%dice-word (%2nd words)))))
       (#t (%put! st %msg (Str8 append "No such command: " cmd ".  ? lists them."))))))
+
+; The one-digit number S, or ().
+(def %lesson-number (fn (_ s) (if (int= (str-byte-len s) 1) ((fn (_ d) (if (if (int< -1 d) (int< d 10) #f) d ())) (int- (str-byte-ref s 0) 48)) ())))
 
 (def %dice-word
   (fn (_ s)
@@ -627,6 +715,7 @@
     (match
       ((not (null? (%get st %command))) (%command-key! st key))
       ((%get st %help) (%put! st %help #f))
+      ((%get st %card) (%put! st %card #f))
       ((if (pair? key) (eq? (first key) (lit mouse)) #f) (%mouse! st key))
       ((if (pair? key) (eq? (first key) (lit place)) #f) (%place-key! st (%2nd key)))
       ((not (str=? (%get st %input) "")) (%input-key! st key))
@@ -643,11 +732,11 @@
       ((eq? key (lit up)) (%cursor-step! st 0 (lit top)))
       ((eq? key (lit down)) (%cursor-step! st 0 (lit bottom)))
       ((if (%is? key "q") #t (eq? key (lit interrupt))) (%put! st %quit #t))
-      ((%is? key "?") (%put! st %help #t))
+      ((%is? key "?") (%put! st (if (%lesson? st) %card %help) #t))
       ((%is? key "u") (%back! st))
       ((%is? key "h") (%hint! st))
       ((%is? key "c") (%coach-toggle! st))
-      ((%is? key "n") (%new-game! st))
+      ((%is? key "n") (if (%lesson? st) (%next-lesson! st) (%new-game! st)))
       ((%is? key "v") (%put! st %view (int- 1 (%get st %view))))
       ((%is? key ":") (%put! st %command ""))
       (#t ()))))
@@ -904,6 +993,7 @@
            ((not (str=? (%get st %input) "")) (Str8 append "Play: " (%get st %input) "▏   Enter plays it, Esc clears"))
            ((not (null? (%get st %done))) (Str8 append "Made: " (Str8 join " " (List map %step-text (%get st %done))) "   ⌫ takes a step back"))
            ((not (null? (%choices st))) (%cube-prompt st))
+           ((%lesson? st) (Str8 append (lesson-title (%get st %lesson)) " · h hint · n next · ? the lesson · :new leaves"))
            (#t %keys-line))))
 
 (def %step-text
@@ -929,20 +1019,28 @@
         "c  the coach on or off"
         ":  a command: white, black, both, none, new,"
         "   dice 31, hint, coach, roll, double, take,"
-        "   pass, quit"
+        "   pass, tutorial, quit"
         "?  these keys q  quit      Any key closes this."))
 
-(def %help!
-  (fn (_ st screen rows cols)
+; The lines over the board, the keys or a lesson's card: () when none.
+(def %over-lines
+  (fn (_ st)
+    (match ((%get st %help) %help-lines)
+           ((if (%get st %card) (%lesson? st) #f) (%card-lines (%get st %lesson)))
+           (#t ()))))
+
+; LINES in a box over the board.
+(def %box!
+  (fn (_ screen rows cols lines)
     (def w 50)
-    (def h (int+ 2 (List length %help-lines)))
+    (def h (int+ 2 (List length lines)))
     (def x (int/ (int- cols w) 2))
     (def y (if (int< rows (int+ h 1)) 0 1))
     (def style (Style make () %black 230))
     (List for-each (fn (_ k) (Screen fill screen (int+ y k) x w style)) (List range 0 h))
     (List for-each
-      (fn (_ i) (Screen put screen (int+ y (int+ 1 i)) (int+ x 3) (List ref i %help-lines) style))
-      (List range 0 (List length %help-lines)))))
+      (fn (_ i) (Screen put screen (int+ y (int+ 1 i)) (int+ x 3) (List ref i lines) style))
+      (List range 0 (List length lines)))))
 
 ; ST drawn on SCREEN.
 (def tui-draw!
@@ -962,7 +1060,7 @@
         (%numbers! st screen lay)
         (%dice! st screen lay)
         (%status! st screen rows (if (int< (%2nd lay) 0) 0 (%2nd lay)))
-        (when (%get st %help) (%help! st screen rows cols))))))
+        ((fn (_ lines) (unless (null? lines) (%box! screen rows cols lines))) (%over-lines st))))))
 
 ; --- for a window -----------------------------------------------------------------
 
@@ -994,7 +1092,8 @@
           (pair (lit hint) (List map (fn (_ s) (list (%viewer-place st (first s)) (%viewer-place st (%2nd s)))) (%get st %hinted)))
           (pair (lit coaching) (%get st %coaching))
           (pair (lit line) (%line-text st))
-          (pair (lit help) (if (%get st %help) %help-lines ()))
+          (pair (lit help) (%over-lines st))
+          (pair (lit lesson) (%get st %lesson))
           (pair (lit score) (%get st %score))
           (pair (lit cube) (%cube st))
           (pair (lit choices) (List map first (%choices st))))))
@@ -1003,5 +1102,5 @@
 (def tui-human? (fn (_ st side) (%human? st side)))
 
 (provide backgammon/tui
-  tui-make tui-game tui-game! tui-quit? tui-message tui-last tui-done tui-score
+  tui-make tui-game tui-game! tui-lesson! tui-quit? tui-message tui-last tui-done tui-score
   tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-draw! tui-events! tui-view tui-counts tui-human?)
