@@ -18,7 +18,9 @@
 (import backgammon/coach coach-judge)
 (import backgammon/bearoff BEAROFF-ONE BEAROFF-ROLL bearoff-make bearoff-rank bearoff-size bearoff-mean bearoff-chance bearoff-win
   bearoff-write! bearoff-read bearoff-use! bearoff-due? bearoff-table bearoff-solve! bearoff-path)
-(import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-play! game-undo! game-plays)
+(import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-play! game-undo! game-plays
+  game-cube game-owner game-offered? game-to-roll? game-may-double? game-roll! game-double! game-take! game-pass!)
+(import backgammon/cube cube-double? cube-take?)
 (import backgammon/play play-run)
 
 ; The texts of the plays of D1 D2 from P, in the order made.

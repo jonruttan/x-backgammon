@@ -49,7 +49,7 @@ row's edge is row 12, the top's row 2.
 (List for-each (fn (_ i) (write (Str8 trim-right (Screen row-text s i)))) '(0 2 7 12 14 16))
 ```
 ---
-    "      13   14   15   16   17   18        19   20   21   22   23   24""       ●                   ●              ●                        ●""                                                    3   1""       ●                   ●              ●                        ●""      12   11   10    9    8    7         6    5    4    3    2    1    off""    ▶ ● White (you)  167 pips     ● Black (engine)  167 pips  games 0-0"
+    "      13   14   15   16   17   18        19   20   21   22   23   24""       ●                   ●              ●                        ●""                                                    3   1""       ●                   ●              ●                        ●""      12   11   10    9    8    7         6    5    4    3    2    1    off""    ▶ ● White (you)  167 pips     ● Black (engine)  167 pips  points 0-0  cube 1"
 
 ### each side's checkers in its own colour
 

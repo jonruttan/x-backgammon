@@ -109,7 +109,7 @@
 
 ; The checkers on the side's home board that COUNT reads, or -1 when it
 ; has one further out.
-(def %home
+(def eval-home
   (fn (_ count)
     ((fn (self i n) (if (int< i 0) n (if (int< i 6) (self (int- i 1) (int+ n (count i))) (if (int< 0 (count i)) -1 (self (int- i 1) n)))))
      BAR 0)))
@@ -120,7 +120,7 @@
     ((fn (_ t n)
        (if (if (null? t) #t (if (int< n 0) #t (int< (bearoff-max t) n))) (int* pips %fine)
          (int/ (int* (bearoff-mean t (bearoff-rank t count)) 49) (int/ (int* 6 BEAROFF-ROLL) %fine))))
-     (bearoff-table) (%home count))))
+     (bearoff-table) (eval-home count))))
 
 ; P's race in 1/64 pips for the side that has just played.
 (def %race
@@ -168,4 +168,4 @@
 ; The play the engine picks for D1 D2 from P.
 (def eval-best (fn (_ p d1 d2) (rest (first (eval-ranked p d1 d2)))))
 
-(provide backgammon/eval evaluate eval-parts eval-fine eval-contact? eval-ranked eval-best)
+(provide backgammon/eval evaluate eval-parts eval-fine eval-contact? eval-home eval-ranked eval-best)

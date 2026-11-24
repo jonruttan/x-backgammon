@@ -174,7 +174,9 @@
                      (if (int< (int% (int- y %buttons-y) (int+ %button-h 10)) %button-h) (List ref i %buttons) ()) ()))
          (if (int< y %buttons-y) -1 (int/ (int- y %buttons-y) (int+ %button-h 10))))
         ()))
+    (def choice (%choice-at x y))
     (match ((not (null? button)) (list (lit key) (%2nd button)))
+           ((not (null? choice)) (list (lit key) (list (lit choice) choice)))
            ((if (null? slot) #t (null? half)) ())
            (#t (list (lit place) (%slot-place (eq? half (lit top)) slot))))))
 
@@ -414,6 +416,48 @@
       ((fn (_ y) (Shape fill! c (list (%circle (int+ %px (int- %pw2 20)) (int+ y (int/ %button-h 2)) 5)) %c-gold))
        (int+ %buttons-y (int* 3 (int+ %button-h 10)))))))
 
+; --- the cube ---------------------------------------------------------------------
+;
+; The cube sits in the tray between the rows: in the middle while it is
+; nobody's, a little toward its owner's side once it is owned.  A
+; person's choices on it, roll or double, take or pass, are two buttons
+; below the panel's, drawn while they wait.
+
+(def %cube-half 18)
+(def %choices-y 660)
+(def %choice-w 95)
+
+(def %cube!
+  (fn (_ g c view cube)
+    (def x (int+ %tray-x (int/ %tray-w 2)))
+    (def y (match ((null? (rest cube)) %mid) ((int= (rest cube) view) (int+ %mid 30)) (#t (int- %mid 30))))
+    (def h %cube-half)
+    (Canvas fill! c (int- x h) (int- y h) (int* 2 h) (int* 2 h) %c-wood-edge)
+    (Canvas fill! c (int- x (int- h 2)) (int- y (int- h 2)) (int* 2 (int- h 2)) (int* 2 (int- h 2)) %c-light)
+    (%text-mid! g c x (int- y 9) (io-display-to-str (first cube)) 14 %c-back)))
+
+(def %choice-x (fn (_ i) (int+ %px (int* i (int- %pw2 %choice-w)))))
+
+(def %choices!
+  (fn (_ g c labels)
+    (List for-each
+      (fn (_ i)
+        ((fn (_ x)
+           (Canvas fill! c x %choices-y %choice-w %button-h %c-gold)
+           (Canvas fill! c (int+ x 2) (int+ %choices-y 2) (int- %choice-w 4) (int- %button-h 4) %c-button)
+           (%text-mid! g c (int+ x (int/ %choice-w 2)) (int+ %choices-y 14) (List ref i labels) 12 %c-text))
+         (%choice-x i)))
+      (List range 0 (List length labels)))))
+
+; The choice button at X Y, 0 or 1, or ().
+(def %choice-at
+  (fn (_ x y)
+    (if (if (int< (int- %choices-y 1) y) (int< y (int+ %choices-y %button-h)) #f)
+      (match ((if (int< (int- (%choice-x 0) 1) x) (int< x (int+ (%choice-x 0) %choice-w)) #f) 0)
+             ((if (int< (int- (%choice-x 1) 1) x) (int< x (int+ (%choice-x 1) %choice-w)) #f) 1)
+             (#t ()))
+      ())))
+
 ; A die showing FACE, its middle at X Y, turned by step A; DIM when used.
 (def %pips
   (list (list (pair 0 0)) (list (pair -1 -1) (pair 1 1)) (list (pair -1 -1) (pair 0 0) (pair 1 1))
@@ -540,6 +584,8 @@
     (%dests! g c p side (%get view (lit dests)))
     (%hint-marks! c p side (%get view (lit hint)))
     (%coach-mark! c (%get view (lit coaching)))
+    (%cube! g c side (%get view (lit cube)))
+    (%choices! g c (%get view (lit choices)))
     (if (null? (found (lit dice)))
       (%dice! c side turn (%get view (lit dice)) (%get view (lit used)))
       (List for-each (fn (_ d) (%die! c (List ref 1 d) (List ref 2 d) (first d) (List ref 3 d) (found (lit roller)) #f)) (found (lit dice))))
@@ -547,7 +593,7 @@
     (def human (%get view (lit human)))
     (%card! g c 90 WHITE p turn human)
     (%card! g c 166 BLACK p turn human)
-    ((fn (_ s) (%text! g c %px 252 (Str8 append "Games  " (io-display-to-str (first s)) " - " (io-display-to-str (rest s))) 12 %c-text))
+    ((fn (_ s) (%text! g c %px 252 (Str8 append "Points  " (io-display-to-str (first s)) " - " (io-display-to-str (rest s))) 12 %c-text))
      (%get view (lit score)))
     (%text! g c %fx 718 (%get view (lit last)) 14 %c-text)
     (%text! g c %fx 746 (%get view (lit msg)) 14 %c-gold)

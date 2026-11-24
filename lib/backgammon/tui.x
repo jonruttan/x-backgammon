@@ -39,8 +39,10 @@
 (import backgammon/bearoff bearoff-due? bearoff-solve!)
 (import backgammon/coach coach-judge)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-set-dice!
-  game-play! game-undo! game-plays)
-(import backgammon/play side-word)
+  game-play! game-undo! game-plays game-cube game-owner game-offered? game-to-roll? game-roll! game-double!
+  game-take! game-pass!)
+(import backgammon/cube cube-double? cube-take?)
+(import backgammon/play side-word result-text)
 
 ; --- the state --------------------------------------------------------------------
 ;
@@ -134,11 +136,7 @@
 
 ; --- plays ------------------------------------------------------------------------
 
-(def %result-text
-  (fn (_ r)
-    (Str8 append (%name (first r)) " wins "
-      (match ((int= (%2nd r) 3) "a backgammon, 3 points") ((int= (%2nd r) 2) "a gammon, 2 points") (#t "1 point"))
-      ".  n starts the next game.")))
+(def %result-text (fn (_ r) (Str8 append (result-text r) ".  n starts the next game.")))
 
 ; The result R counted in the games won, by SIGN: 1 to count it, -1 to
 ; take it back.
@@ -165,13 +163,129 @@
     (%clear-play! st)
     (%put! st %last text)
     (%put! st %msg "")
-    (if (game-over? g)
-      (do (%count! st (game-result g) 1)
-          (%put! st %scored (game-result g))
-          (%put! st %msg (%result-text (game-result g)))
-          (%event! st (pair (lit over) (game-result g))))
-      (%roll-event! st))
+    (%next! st)
     (Heap collect)))
+
+; After a play or a cube's answer: the game's end counted, or the dice
+; thrown shown.  A side still to roll shows nothing yet.
+(def %next!
+  (fn (_ st)
+    (def g (%get st %game))
+    (match
+      ((game-over? g)
+        (do (%count! st (game-result g) 1)
+            (%put! st %scored (game-result g))
+            (%put! st %msg (%result-text (game-result g)))
+            (%event! st (pair (lit over) (game-result g)))))
+      ((null? (game-dice g)) ())
+      (#t (%roll-event! st)))))
+
+; --- the cube ---------------------------------------------------------------------
+;
+; A side that may double chooses before it rolls; the other side then
+; takes or passes.  The engine's choices are backgammon/cube's.
+
+; The side to move rolls.
+(def %roll!
+  (fn (_ st)
+    (game-roll! (%get st %game))
+    (%put! st %msg "")
+    (%roll-event! st)))
+
+; The side to move doubles.
+(def %double!
+  (fn (_ st)
+    (def g (%get st %game))
+    (game-double! g)
+    (%put! st %msg "")
+    (%put! st %coach "")
+    (%put! st %last (Str8 append (%name (game-turn g)) " doubles to " (%num (int* 2 (game-cube g))) "."))))
+
+; The other side takes, and the doubler rolls.
+(def %take!
+  (fn (_ st)
+    (def g (%get st %game))
+    (game-take! g)
+    (%put! st %msg "")
+    (%put! st %last (Str8 append (%name (int- 1 (game-turn g))) " takes: the cube is at " (%num (game-cube g)) "."))
+    (%next! st)))
+
+; The other side passes, and the game is the doubler's.
+(def %pass!
+  (fn (_ st)
+    (def g (%get st %game))
+    (game-pass! g)
+    (%put! st %last (Str8 append (%name (int- 1 (game-turn g))) " passes."))
+    (%next! st)))
+
+; Who answers the cube now: the side to move when it is to roll, the
+; other side when a double is offered; () when nothing waits on it.
+(def %cube-side
+  (fn (_ st)
+    (def g (%get st %game))
+    (match ((game-to-roll? g) (game-turn g))
+           ((if (game-over? g) #f (game-offered? g)) (int- 1 (game-turn g)))
+           (#t ()))))
+
+; The choices a person has on the cube now, as (LABEL KEY): roll or
+; double, take or pass; () when none.
+(def %choices
+  (fn (_ st)
+    (def g (%get st %game))
+    (def side (%cube-side st))
+    (match ((null? side) ())
+           ((not (%human? st side)) ())
+           ((game-offered? g) (list (list "Take" "t") (list "Pass" "p")))
+           (#t (list (list "Roll" "r") (list "Double" "d"))))))
+
+; KEY, one of the cube's, acted on: r d t p.
+(def %cube-key!
+  (fn (_ st key)
+    (def g (%get st %game))
+    (def keys (List map %2nd (%choices st)))
+    (match
+      ((null? (List find (fn (_ k) (str=? k key)) keys))
+        (%put! st %msg
+          (match ((null? keys) "There is nothing of yours to roll, double, take or pass now.")
+                 ((game-offered? g) "Take or pass first: t takes, p passes.")
+                 (#t "Roll or double first: r rolls, d doubles."))))
+      ((str=? key "r") (%roll! st))
+      ((str=? key "d") (%double! st))
+      ((str=? key "t") (%take! st))
+      (#t (%pass! st)))))
+
+; #t when a person is to roll or double.
+(def %roll-waits? (fn (_ st) (if (null? (%choices st)) #f (not (game-offered? (%get st %game))))))
+
+; Choice I of those a person has on the cube, as a window's button picks it.
+(def %choice!
+  (fn (_ st i)
+    ((fn (_ cs) (if (if (int< -1 i) (int< i (List length cs)) #f) (%cube-key! st (%2nd (List ref i cs))) (%cube-first! st)))
+     (%choices st))))
+
+; What must happen on the cube before anything else, said: a person's
+; choice, or the engine's turn.
+(def %cube-first!
+  (fn (_ st)
+    ((fn (_ side)
+       (match ((null? side) (%cube-key! st ""))
+              ((%human? st side) (%cube-key! st ""))
+              (#t (%put! st %msg "It is not your turn."))))
+     (%cube-side st))))
+
+; What waits on a person's cube choice, as a line; "" when nothing does.
+(def %cube-prompt
+  (fn (_ st)
+    (def g (%get st %game))
+    (match
+      ((null? (%choices st)) "")
+      ((game-offered? g)
+        (Str8 append (%name (game-turn g)) " doubles: t takes at " (%num (int* 2 (game-cube g))) ", p passes."))
+      (#t (Str8 append (%name (game-turn g)) " to roll: r rolls, d doubles to " (%num (int* 2 (game-cube g))) ".")))))
+
+; The cube as the window and the terminal show it: (VALUE . OWNER),
+; OWNER () while it is in the middle.
+(def %cube (fn (_ st) ((fn (_ g) (pair (game-cube g) (game-owner g))) (%get st %game))))
 
 ; --- events -----------------------------------------------------------------------
 ;
@@ -181,7 +295,7 @@
 ;                                in POS, seen from the side to move, which
 ;                                is playing DICE and has used the dice
 ;                                USED before it
-;   (over WINNER POINTS)         the game won
+;   (over WINNER POINTS KIND)    the game won, as backgammon/game says
 ;   (jump)                       the board changed without a play: taken
 ;                                back, set up, or a new game coming
 ; The terminal shows none of them, and takes them to keep the list short.
@@ -202,26 +316,31 @@
 ; The events since the last time, oldest first; the list emptied.
 (def tui-events! (fn (_ st) ((fn (_ es) (%put! st %events ()) es) (%get st %events))))
 
-; Whether the side to move is played without a person: the engine's
-; side, or a roll with one play.
+; Whether what comes next is done without a person: the engine's cube
+; choice or play, or a roll with one play.
 (def tui-engine-to-move?
   (fn (_ st)
     (def g (%get st %game))
+    (def cube (%cube-side st))
     (match
       ((game-over? g) #f)
+      ((not (null? cube)) (not (%human? st cube)))
       ((not (%human? st (game-turn g))) #t)
       ((null? (%get st %done)) (int< (List length (game-plays g)) 2))
       (#t #f))))
 
-; The side to move's play made for it: the engine's choice, or the only
-; play there is.
+; What comes next done for the side it falls to: the engine's take or
+; pass, its double or roll, its play; or the only play there is.
 (def tui-auto-play!
   (fn (_ st)
     (def g (%get st %game))
     (def d (game-dice g))
-    (if (%human? st (game-turn g))
-      ((fn (_ pl) (%commit! st pl (if (null? (first pl)) "cannot move" "had to play") #f)) (first (game-plays g)))
-      (%commit! st (eval-best (game-pos g) (first d) (%2nd d)) "played" #f))))
+    (match
+      ((game-offered? g) (if (cube-take? g) (%take! st) (%pass! st)))
+      ((game-to-roll? g) (if (cube-double? g) (%double! st) (%roll! st)))
+      ((%human? st (game-turn g))
+        ((fn (_ pl) (%commit! st pl (if (null? (first pl)) "cannot move" "had to play") #f)) (first (game-plays g))))
+      (#t (%commit! st (eval-best (game-pos g) (first d) (%2nd d)) "played" #f)))))
 
 ; The bear-off is solved once on a machine, when a game first gets to a
 ; race: due while there is no table and the sides are past each other.
@@ -319,6 +438,7 @@
     (def g (%get st %game))
     (match
       ((game-over? g) (%put! st %msg "The game is over: n starts the next one."))
+      ((not (null? (%cube-side st))) (%cube-first! st))
       ((not (%human? st (game-turn g))) (%put! st %msg "It is not your turn."))
       (#t
         ((fn (_ i sel)
@@ -356,6 +476,7 @@
     (%put! st %input "")
     (match
       ((game-over? g) (%put! st %msg "The game is over: n starts the next one."))
+      ((not (null? (%cube-side st))) (%cube-first! st))
       ((not (%human? st (game-turn g))) (%put! st %msg "It is not your turn."))
       (#t ((fn (_ found)
              (if (str? found) (%put! st %msg (Str8 append found ": " text))
@@ -367,17 +488,20 @@
 (def %hint!
   (fn (_ st)
     (def g (%get st %game))
-    (if (game-over? g) (%put! st %msg "The game is over.")
-      ((fn (_ ranked)
-         (def best (first (first ranked)))
-         (%put! st %hinted (first (rest (first ranked))))
-         (%put! st %msg
-           (Str8 append "Hint: "
-             (Str8 join "  ·  "
-               (List map (fn (_ r) (if (eq? r (first ranked)) (play-text (rest r))
-                                     (Str8 append (play-text (rest r)) " " (%score-text (int- (first r) best)))))
-                 (List take 3 ranked))))))
-       (eval-ranked (game-pos g) (first (game-dice g)) (%2nd (game-dice g)))))))
+    (match
+      ((game-over? g) (%put! st %msg "The game is over."))
+      ((game-offered? g) (%put! st %msg (if (cube-take? g) "Hint: take." "Hint: pass.")))
+      ((game-to-roll? g) (%put! st %msg (if (cube-double? g) "Hint: double." "Hint: roll.")))
+      (#t ((fn (_ ranked)
+             (def best (first (first ranked)))
+             (%put! st %hinted (first (rest (first ranked))))
+             (%put! st %msg
+               (Str8 append "Hint: "
+                 (Str8 join "  ·  "
+                   (List map (fn (_ r) (if (eq? r (first ranked)) (play-text (rest r))
+                                         (Str8 append (play-text (rest r)) " " (%score-text (int- (first r) best)))))
+                     (List take 3 ranked))))))
+           (eval-ranked (game-pos g) (first (game-dice g)) (%2nd (game-dice g))))))))
 
 (def %coach-toggle!
   (fn (_ st)
@@ -454,6 +578,10 @@
       ((str=? cmd "new") (%new-game! st))
       ((str=? cmd "hint") (%hint! st))
       ((str=? cmd "coach") (%coach-toggle! st))
+      ((str=? cmd "roll") (%cube-key! st "r"))
+      ((str=? cmd "double") (%cube-key! st "d"))
+      ((str=? cmd "take") (%cube-key! st "t"))
+      ((if (str=? cmd "pass") #t (str=? cmd "drop")) (%cube-key! st "p"))
       ((str=? cmd "help") (%put! st %help #t))
       ((not (null? (side-word cmd)))
         (do (%put! st %human (side-word cmd))
@@ -502,7 +630,10 @@
       ((if (pair? key) (eq? (first key) (lit mouse)) #f) (%mouse! st key))
       ((if (pair? key) (eq? (first key) (lit place)) #f) (%place-key! st (%2nd key)))
       ((not (str=? (%get st %input) "")) (%input-key! st key))
+      ((if (pair? key) (eq? (first key) (lit choice)) #f) (%choice! st (%2nd key)))
       ((%digit? key) (%put! st %input key))
+      ((if (if (eq? key (lit enter)) #t (%is? key " ")) (%roll-waits? st) #f) (%cube-key! st "r"))
+      ((if (%is? key "r") #t (if (%is? key "d") #t (if (%is? key "t") #t (%is? key "p")))) (%cube-key! st key))
       ((if (eq? key (lit enter)) #t (%is? key " "))
         ((fn (_ c) (%pick! st (%slot-place (first c) (rest c)))) (%get st %cursor)))
       ((eq? key (lit escape)) (do (%put! st %sel ()) (%put! st %dests ()) (%put! st %msg "")))
@@ -705,7 +836,7 @@
 (def %dice!
   (fn (_ st screen lay)
     (def g (%get st %game))
-    (unless (game-over? g)
+    (unless (if (game-over? g) #t (null? (game-dice g)))
       (do
         (def d (game-dice g))
         (def side (game-turn g))
@@ -752,11 +883,18 @@
         (Screen put screen 16 (int+ x 4) (%side-text st p side) (Style make (if (eq? side to-move) (list (lit bold)) ()) () ()))))
     (def end (side! BLACK (int+ 3 (side! WHITE x))))
     (def s (%get st %score))
-    (Screen put screen 16 (int+ end 2) (Str8 append "games " (%num (first s)) "-" (%num (rest s))) (Style make (list (lit dim)) () ()))
+    (Screen put screen 16 (int+ end 2) (Str8 append "points " (%num (first s)) "-" (%num (rest s)) "  " (%cube-text st))
+      (Style make (list (lit dim)) () ()))
     (Screen put screen 17 x (%get st %last) 0)
     (Screen put screen 18 x (%note st) (Style make (list (lit bold)) () ()))
     (Screen put screen (int- rows 1) x (%line-text st)
-      (Style make (if (if (null? (%get st %command)) (str=? (%get st %input) "") #f) (list (lit dim)) ()) () ()))))
+      (Style make (if (if (null? (%get st %command)) (if (str=? (%get st %input) "") (null? (%choices st)) #f) #f) (list (lit dim)) ()) () ()))))
+
+; The cube as the status line says it: its value, and whose it is.
+(def %cube-text
+  (fn (_ st)
+    ((fn (_ c) (Str8 append "cube " (%num (first c)) (if (null? (rest c)) "" (Str8 append " " (%name (rest c))))))
+     (%cube st))))
 
 ; The bottom line: the command or the play being typed, the steps made,
 ; or the keys.
@@ -765,6 +903,7 @@
     (match ((not (null? (%get st %command))) (Str8 append ":" (%get st %command) "▏"))
            ((not (str=? (%get st %input) "")) (Str8 append "Play: " (%get st %input) "▏   Enter plays it, Esc clears"))
            ((not (null? (%get st %done))) (Str8 append "Made: " (Str8 join " " (List map %step-text (%get st %done))) "   ⌫ takes a step back"))
+           ((not (null? (%choices st))) (%cube-prompt st))
            (#t %keys-line))))
 
 (def %step-text
@@ -778,20 +917,20 @@
   (list "Click a checker, then the place it goes:"
         "by one die, or by both to go further."
         "Or move with the arrows and pick with Enter."
-        "Picking the same checker again moves it"
-        "by the larger die."
+        "Picking it again moves it by the larger die."
         ""
         "Type a play the way it is written, then Enter:"
         "24/18 13/11, 8/5(2), bar/22, 6/off."
         ""
+        "Before a roll: r or Enter rolls, d doubles."
+        "Doubled: t takes, p passes."
         "Backspace, u  take back a step, or your play"
         "h  hint       n  new game     v  turn board"
         "c  the coach on or off"
-        ":  a command: white, black, both, none,"
-        "   dice 31, new, hint, coach, quit"
-        "?  these keys q  quit"
-        ""
-        "Any key closes this."))
+        ":  a command: white, black, both, none, new,"
+        "   dice 31, hint, coach, roll, double, take,"
+        "   pass, quit"
+        "?  these keys q  quit      Any key closes this."))
 
 (def %help!
   (fn (_ st screen rows cols)
@@ -834,7 +973,9 @@
 ; of the checker picked, or (); dests, the places it can go; cursor,
 ; (TOP . SLOT); human, white, black, both or none; last, msg and line,
 ; the texts; help, the lines of the keys while they are shown, else ();
-; and score, the games won, (WHITE . BLACK).
+; score, the points won, (WHITE . BLACK); cube, (VALUE . OWNER), OWNER
+; () while it is in the middle; and choices, the labels of a person's
+; choices on the cube, ("Roll" "Double") or ("Take" "Pass"), else ().
 (def tui-view
   (fn (_ st)
     (def g (%get st %game))
@@ -854,7 +995,9 @@
           (pair (lit coaching) (%get st %coaching))
           (pair (lit line) (%line-text st))
           (pair (lit help) (if (%get st %help) %help-lines ()))
-          (pair (lit score) (%get st %score)))))
+          (pair (lit score) (%get st %score))
+          (pair (lit cube) (%cube st))
+          (pair (lit choices) (List map first (%choices st))))))
 
 ; Whether a person plays SIDE in ST.
 (def tui-human? (fn (_ st side) (%human? st side)))
