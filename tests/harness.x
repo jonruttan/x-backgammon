@@ -87,7 +87,7 @@
 ;
 ; The kinds of the events ST has had since last asked; a picture's pixel
 ; at X Y; and the board drawn from ST's view, the gui answered.
-(import x/gfx/canvas)
+(import gfx/canvas)
 (import backgammon/gui gui-make gui-draw! gui-at gui-spot gui-dice-x gui-canvas)
 (import backgammon/sound sound-render)
 
