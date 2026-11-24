@@ -27,6 +27,8 @@
   game-set-dice! game-play! game-undo! game-plays game-cube game-offered? game-to-roll? game-roll!
   game-double! game-take! game-pass!)
 (import backgammon/show board-text)
+(import backgammon/lesson lesson-count lesson-title lesson-lines lesson-ask lesson-cube? lesson-game lesson-judge
+  lesson-judge-cube)
 
 (def %help
   (Str8 join "\n"
@@ -44,6 +46,7 @@
           "  new            a new game"
           "  white, black   play that side against the engine"
           "  both, none     play both sides, or watch the engine play both"
+          "  tutorial       the lessons, then a game as white"
           "  help, quit"
           "")))
 
@@ -158,6 +161,7 @@
       ((str=? line "undo")
         (do (unless (game-undo! g (fn (_ side) (%human? st side))) (%say io "nothing of yours to take back\n")) #t))
       ((str=? line "new") (do (%new-game! io st) #t))
+      ((str=? line "tutorial") (if (%tutorial! io st) (do (%new-game! io st) #t) #f))
       ((List includes? line (list "white" "black" "both" "none"))
         (do (%put! st %s-human (side-word line)) #t))
       (#t
@@ -247,12 +251,81 @@
          (%read io (Str8 append (board-text (game-pos g))
                      (%name (game-turn g)) " to play " (%dice-text (game-dice g)) "> ")))))))
 
+; --- the tutorial -----------------------------------------------------------------
+;
+; Each lesson's card is said, then its play, or its take or pass, read
+; until it is right.
+
+(def %card-text
+  (fn (_ i)
+    (Str8 append (lesson-title i) "\n\n" (Str8 join "\n" (lesson-lines i)) "\n\n" (lesson-ask i)
+      "\nhint shows the best, lesson says this again, next goes on, quit stops.\n")))
+
+; LINE, an answer to lesson I's question in G: #t once it is right.
+(def %answer
+  (fn (_ io g i line)
+    (def judged
+      (fn (_ j) (%say io (Str8 append (rest j) (if (first j) "\n" "  Try again.\n"))) (first j)))
+    (match
+      ((lesson-cube? i)
+        (match ((%one-of? line (list "take" "t")) (judged (lesson-judge-cube g #t)))
+               ((%one-of? line (list "pass" "p" "drop")) (judged (lesson-judge-cube g #f)))
+               (#t (do (%say io "take or pass\n") #f))))
+      (#t ((fn (_ found) (if (str? found) (do (%say io (Str8 append found ": " line "\n")) #f) (judged (lesson-judge g found))))
+           (play-find (game-pos g) (first (game-dice g)) (first (rest (game-dice g))) line))))))
+
+; Lesson I of the session ST: #f to quit, else #t.
+(def %lesson
+  (fn (_ io st i)
+    (def g (lesson-game i (%get st %s-rnd)))
+    (def prompt
+      (Str8 append (board-text (game-pos g))
+        (if (lesson-cube? i)
+          (Str8 append (%name (game-turn g)) " doubles to " (io-display-to-str (int* 2 (game-cube g))) ".  "
+            (%name (int- 1 (game-turn g))) ": take or pass> ")
+          (Str8 append (%name (game-turn g)) " to play " (%dice-text (game-dice g)) "> "))))
+    (%say io (%card-text i))
+    ((fn (self)
+       ((fn (_ line)
+          (match
+            ((null? line) #f)
+            ((%one-of? line (list "quit" "exit")) #f)
+            ((str=? line "next") #t)
+            ((str=? line "lesson") (do (%say io (%card-text i)) (self)))
+            ((str=? line "hint")
+              (do (%say io
+                    (if (lesson-cube? i) (Str8 append "Hint: " (if (cube-take? g) "take" "pass") ".\n")
+                      (%hint-text (eval-ranked (game-pos g) (first (game-dice g)) (first (rest (game-dice g)))))))
+                  (self)))
+            ((%answer io g i line) #t)
+            (#t (self))))
+        ((fn (_ line) (if (null? line) () (%trim line))) (%read io prompt)))))))
+
+; The tutorial's lessons in the session ST, played as white: #f to quit,
+; else #t.
+(def %tutorial!
+  (fn (_ io st)
+    (%put! st %s-human (lit white))
+    ((fn (self i)
+       (match ((not (int< i lesson-count)) (do (%say io "That is the tutorial.  A game against the engine follows.\n") #t))
+              ((%lesson io st i) (self (int+ i 1)))
+              (#t #f)))
+     0)))
+
+; The session ST played until it is over: the exit status.
+(def %session (fn (_ io st) ((fn (self) (when (%step io st) (self)))) 0))
+
 ; A session on IO with the dice from RND, the people playing HUMAN.
 (def play-run
   (fn (_ io rnd human)
     (def st (Vector of () rnd human))
     (%new-game! io st)
-    ((fn (self) (when (%step io st) (self))))
-    0))
+    (%session io st)))
 
-(provide backgammon/play play-run side-word result-text)
+; The tutorial on IO, then a session as white, the dice from RND.
+(def play-tutorial
+  (fn (_ io rnd)
+    (def st (Vector of () rnd (lit white)))
+    (if (%tutorial! io st) (do (%new-game! io st) (%session io st)) 0)))
+
+(provide backgammon/play play-run play-tutorial side-word result-text)

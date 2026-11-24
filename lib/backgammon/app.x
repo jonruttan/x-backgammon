@@ -20,7 +20,7 @@
 (import x/repl/term)
 (import x/tui/screen)
 (import x/core/doors io-display-to-str)
-(import backgammon/tui tui-make tui-quit? tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-draw! tui-events!)
+(import backgammon/tui tui-make tui-lesson! tui-quit? tui-engine-to-move? tui-auto-play! tui-solve-due? tui-solve-note! tui-solve! tui-key! tui-draw! tui-events!)
 
 (def %esc (fn (_ text) (Str8 append "\x1b" text)))
 
@@ -118,12 +118,13 @@
             (self st screen reader)))
       (#t (do (%act! st (%wait-key st screen reader)) (self st screen reader))))))
 
-; Play on the terminal, the dice from RND, the people playing HUMAN:
-; the exit status.
+; Play on the terminal, the dice from RND, the people playing HUMAN,
+; from the tutorial's first lesson when TUTORIAL: the exit status.
 (def app-run
-  (fn (_ rnd human)
+  (fn (_ rnd human tutorial)
     (def size (Term window 0))
     (def st (tui-make rnd human))
+    (when tutorial (tui-lesson! st 0))
     (def screen (Screen make (rest size) (first size)))
     (def token (Term raw! 0))
     (Term emit 1 (Str8 append (%esc "[?1049h") (%esc "[?25l") (%esc "[?1000h") (%esc "[?1006h")))

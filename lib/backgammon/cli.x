@@ -17,7 +17,7 @@
 (import x/core/doors int< int- int+ int= str-make str-byte-len str-byte-ref str-byte-sub io-display-to-str)
 (import backgammon/board pos-start plays play-text perft)
 (import backgammon/show board-text)
-(import backgammon/play play-run side-word)
+(import backgammon/play play-run play-tutorial side-word)
 (import backgammon/app app-run)
 (import backgammon/window window-run)
 (import x/sys/sdl)
@@ -30,6 +30,7 @@
     "Backgammon against the engine: on the board, filling the terminal, or a\nline at a time; the legal plays of a roll, and counts of them."
     (list (Opts arg "-s" "--side" "SIDE" "The side you play: white (the default), black, both or none")
           (Opts arg "-S" "--seed" "N" "Roll the dice from seed N; the seed is printed when none is given")
+          (Opts flag "-t" "--tutorial" "Start with the lessons, as white")
           (Opts flag "-L" "--line" "Play a line at a time, not on the board")
           (Opts flag "-w" "--window" "Play in a window, checkers clicked or dragged, the dice heard")
           (Opts flag "-W" "--web" "Play in a browser tab, its address printed")
@@ -124,26 +125,28 @@
             ; the launcher parks the caller's stdin on fd 3 while its boot
             ; stream holds fd 0; it is taken back, as x-chess and x-grep do
             (guard (e ()) (do (Sys dup2 3 0) (Sys close 3)))
-            ((fn (_ tty rnd)
-               (match ((Opts on? opts "-w") (%window-play Sdl opts rnd side))
-                      ((Opts on? opts "-W") (%window-play Web opts rnd side))
-                      ((if tty (not (Opts on? opts "-L")) #f) (app-run rnd side))
+            ((fn (_ tty rnd tutorial)
+               (match ((Opts on? opts "-w") (%window-play Sdl opts rnd side tutorial))
+                      ((Opts on? opts "-W") (%window-play Web opts rnd side tutorial))
+                      ((if tty (not (Opts on? opts "-L")) #f) (app-run rnd side tutorial))
+                      (tutorial (play-tutorial (%io tty) rnd))
                       (#t (play-run (%io tty) rnd side))))
-             (if (Term tty? 0) (Sys isatty 1) #f) (Random sw seed)))))))
+             (if (Term tty? 0) (Sys isatty 1) #f) (Random sw seed) (Opts on? opts "-t")))))))
 
 (def %web-ports (list 8080 8081 8082 8083 8084 8085 8086 8087 8088 8089 0))
 
 ; --window and --web: the board in a window, or in a browser tab, which
-; prints its address: the exit status.
+; prints its address, from the tutorial's first lesson when TUTORIAL:
+; the exit status.
 (def %window-play
-  (fn (_ front opts rnd side)
+  (fn (_ front opts rnd side tutorial)
     (when (eq? front Web) (Web listen! (Opts value opts "-l" "127.0.0.1") %web-ports))
     (if (if (eq? front Sdl) (not (Sdl available?)) #f)
       (do (%say 2 "x-backgammon: no SDL3 to open a window with; --web plays in a browser tab\n") 1)
       ((fn (_ failed)
          (if (null? failed) 0
            (do (%say 2 (Str8 append "x-backgammon: " (if (Err err? failed) (failed msg) (io-display-to-str failed)) "\n")) 1)))
-       (window-run front rnd side)))))
+       (window-run front rnd side tutorial)))))
 
 ; ARGS, the command line after the launcher's options: the exit status.
 (def backgammon-main
