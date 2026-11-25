@@ -234,9 +234,11 @@ take; how strongly it plays is its own setting.  Hints, the coach and
 the lessons are still the engine's.
 
 When nothing answers at the address, or what answers is not gnubg,
-`play` stops with a message.  When gnubg stops answering in a game, or
+`play` stops with a message.  gnubg is waited for 60 seconds an answer;
+when it stops answering in a game, gives no answer in that time, or
 answers what is not a choice of the position, the engine makes that
-choice and the message says so.
+choice and the message says so.  After a wait runs out gnubg is not
+asked again, and the engine plays the rest of the session.
 
 ## The rules played
 
