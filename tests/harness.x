@@ -22,6 +22,7 @@
   game-cube game-owner game-offered? game-to-roll? game-may-double? game-roll! game-double! game-take! game-pass!)
 (import backgammon/cube cube-double? cube-take?)
 (import backgammon/play play-run)
+(import backgammon/opponent opponent-make opponent-engine opponent-name opponent-play opponent-double? opponent-take? opponent-note!)
 (import backgammon/record xgid-text xgid-game mat-text record-save!)
 (import backgammon/lesson lesson-count lesson-title lesson-lines lesson-ask lesson-cube? lesson-game lesson-judge
   lesson-judge-cube)
@@ -41,9 +42,12 @@
 
 ; A session fed LINES, its dice from SEED, the people playing HUMAN:
 ; (STATUS . OUTPUT), the output the session wrote, prompts and all.
-; HUMAN tutorial runs the tutorial first.
-(def spec-session
-  (fn (_ lines seed human)
+; HUMAN tutorial runs the tutorial first.  spec-session-against has the
+; opponent OPP play the other sides, not the engine.
+(def spec-session (fn (_ lines seed human) (spec-session-against lines seed human (opponent-engine))))
+
+(def spec-session-against
+  (fn (_ lines seed human opp)
     (def in (Vector of lines))
     (def out (Vector of ()))
     (def io
@@ -52,7 +56,7 @@
               ((fn (_ ls) (if (null? ls) () (do (Vector set! 0 (rest ls) in) (first ls)))) (Vector ref 0 in)))
             (fn (_ text) (Vector set! 0 (pair text (Vector ref 0 out)) out))))
     ((fn (_ status) (pair status (Str8 join "" (List reverse (Vector ref 0 out)))))
-     (if (eq? human (lit tutorial)) (play-run io (Random sw seed) (lit white) "tutorial") (play-run io (Random sw seed) human "")))))
+     (if (eq? human (lit tutorial)) (play-run io (Random sw seed) (lit white) "tutorial" opp) (play-run io (Random sw seed) human "" opp)))))
 
 ; #t when NEEDLE is in TEXT.
 (def spec-has? (fn (_ needle text) (not (null? (Str8 index-of needle text)))))
@@ -77,7 +81,7 @@
 
 (def spec-tui
   (fn (_ human d1 d2)
-    (def st (tui-make (Random sw 1) human))
+    (def st (tui-make (Random sw 1) human (opponent-engine)))
     (tui-events! st)
     (tui-game! st (game-at (pos-start) (list d1 d2) (Random sw 1)))))
 
@@ -120,3 +124,33 @@
 ;
 ; The rank in T of the position whose counts, from the 1-point up, are CS.
 (def spec-rank (fn (_ t cs) (bearoff-rank t (fn (_ k) (List ref k cs)))))
+
+; --- gnubg ------------------------------------------------------------------------
+;
+; A stand-in for gnubg's external player on this machine.  It answers
+; gnubg's version lines and then REPLIES, a line each, all written before
+; the client asks, as one process cannot answer while it waits; it is
+; closed after when CLOSE is #t.  (OPP . PEER): the opponent over it, and
+; the stand-in's end, to read what it was asked.
+(import x/sys/socket)
+(import backgammon/gnubg gnubg-board gnubg-play-text gnubg-on gnubg-opponent)
+(import x/core/doors io-display-to-str)
+
+(def spec-stand-in
+  (fn (_ replies close)
+    (def l (Socket tcp-listen-on "127.0.0.1" 0))
+    (def fd (Socket tcp-connect "127.0.0.1" (Socket local-port l)))
+    (def peer (Socket accept l))
+    (Socket close l)
+    (Socket send peer
+      (Str8 join "" (List map (fn (_ r) (Str8 append r "\n"))
+                      (List append (list "Interface: 2" "RFBF: 0" "Engine: 1.01" "Software: stand-in") replies))))
+    (when close (Socket close peer))
+    (pair (gnubg-on fd) peer)))
+
+; What the stand-in at PEER was asked, the lines as one string.
+(def spec-asked (fn (_ peer) ((fn (_ s) (if (null? s) "" s)) (Socket recv peer 65536))))
+
+; An address on this machine nothing listens at, ":PORT".
+(def spec-free-address
+  (fn (_) ((fn (_ l) ((fn (_ p) (Socket close l) (Str8 append ":" (io-display-to-str p))) (Socket local-port l))) (Socket tcp-listen-on "127.0.0.1" 0))))

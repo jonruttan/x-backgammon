@@ -19,6 +19,8 @@
 (import backgammon/show board-text)
 (import backgammon/play play-run side-word)
 (import backgammon/record xgid-game)
+(import backgammon/opponent opponent-engine opponent-name)
+(import backgammon/gnubg gnubg-opponent)
 (import backgammon/app app-run)
 (import backgammon/window window-run)
 (import x/sys/sdl)
@@ -33,6 +35,7 @@
           (Opts arg "-S" "--seed" "N" "Roll the dice from seed N; the seed is printed when none is given")
           (Opts flag "-t" "--tutorial" "Start with the lessons, as white")
           (Opts arg "-x" "--xgid" "XGID" "Start from the position XGID, as eXtreme Gammon and GNU Backgammon write it")
+          (Opts arg "-g" "--gnubg" "ADDRESS" "Play GNU Backgammon, listening at HOST:PORT after `external :PORT`, not the engine")
           (Opts flag "-L" "--line" "Play a line at a time, not on the board")
           (Opts flag "-w" "--window" "Play in a window, checkers clicked or dragged, the dice heard")
           (Opts flag "-W" "--web" "Play in a browser tab, its address printed")
@@ -123,35 +126,40 @@
     (def bad-xgid (if (null? xgid) () ((fn (_ g) (if (str? g) g ())) (xgid-game xgid (Random sw 1)))))
     ; the first command of the session: the lessons, or the position given
     (def start (match ((Opts on? opts "-t") "tutorial") ((null? xgid) "") (#t (Str8 append "xgid " xgid))))
+    (def gnubg (Opts value opts "-g"))
+    (def opp (if (null? gnubg) (opponent-engine) (gnubg-opponent gnubg)))
     (match
       ((null? side) (do (%say 2 "x-backgammon: --side takes white, black, both or none\n") 2))
       ((null? seed) (do (%say 2 "x-backgammon: --seed takes a number\n") 2))
       ((not (null? bad-xgid)) (do (%say 2 (Str8 append "x-backgammon: --xgid: " bad-xgid "\n")) 2))
+      ((str? opp) (do (%say 2 (Str8 append "x-backgammon: --gnubg: " opp "\n")) 2))
       (#t
         (do (when (null? given) (%say 2 (Str8 append "x-backgammon: seed " (io-display-to-str seed) "\n")))
+            (unless (null? gnubg) (%say 2 (Str8 append "x-backgammon: " (opponent-name opp) " plays\n")))
             ; the launcher parks the caller's stdin on fd 3 while its boot
             ; stream holds fd 0; it is taken back, as x-chess and x-grep do
             (guard (e ()) (do (Sys dup2 3 0) (Sys close 3)))
             ((fn (_ tty rnd)
-               (match ((Opts on? opts "-w") (%window-play Sdl opts rnd side start))
-                      ((Opts on? opts "-W") (%window-play Web opts rnd side start))
-                      ((if tty (not (Opts on? opts "-L")) #f) (app-run rnd side start))
-                      (#t (play-run (%io tty) rnd side start))))
+               (match ((Opts on? opts "-w") (%window-play Sdl opts rnd side start opp))
+                      ((Opts on? opts "-W") (%window-play Web opts rnd side start opp))
+                      ((if tty (not (Opts on? opts "-L")) #f) (app-run rnd side start opp))
+                      (#t (play-run (%io tty) rnd side start opp))))
              (if (Term tty? 0) (Sys isatty 1) #f) (Random sw seed)))))))
 
 (def %web-ports (list 8080 8081 8082 8083 8084 8085 8086 8087 8088 8089 0))
 
 ; --window and --web: the board in a window, or in a browser tab, which
-; prints its address, the command START run first: the exit status.
+; prints its address, the command START run first, the opponent OPP: the
+; exit status.
 (def %window-play
-  (fn (_ front opts rnd side start)
+  (fn (_ front opts rnd side start opp)
     (when (eq? front Web) (Web listen! (Opts value opts "-l" "127.0.0.1") %web-ports))
     (if (if (eq? front Sdl) (not (Sdl available?)) #f)
       (do (%say 2 "x-backgammon: no SDL3 to open a window with; --web plays in a browser tab\n") 1)
       ((fn (_ failed)
          (if (null? failed) 0
            (do (%say 2 (Str8 append "x-backgammon: " (if (Err err? failed) (failed msg) (io-display-to-str failed)) "\n")) 1)))
-       (window-run front rnd side start)))))
+       (window-run front rnd side start opp)))))
 
 ; ARGS, the command line after the launcher's options: the exit status.
 (def backgammon-main

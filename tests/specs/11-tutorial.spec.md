@@ -59,7 +59,7 @@ last is a double to take or pass.
 ### a lesson shows its card, takes back a wrong play, and makes a right one
 
 ```backgammon
-(def st (tui-make (Random sw 1) 'white))
+(def st (tui-make (Random sw 1) 'white (opponent-engine)))
 (tui-lesson! st 0)
 (def tu-card (first (spec-view st 'help)))
 (spec-keys! st (list 'escape "1" "3" "/" "8" " " "1" "3" "/" "7" 'enter))
@@ -75,7 +75,7 @@ last is a double to take or pass.
 ### n goes to the next lesson, its card shown
 
 ```backgammon
-(def st (tui-make (Random sw 1) 'white))
+(def st (tui-make (Random sw 1) 'white (opponent-engine)))
 (tui-lesson! st 0)
 (spec-keys! st (list 'escape "n"))
 (write (list (spec-view st 'lesson) (first (spec-view st 'help)) (tui-last st)))
@@ -87,7 +87,7 @@ last is a double to take or pass.
 ### doubled in the cube's lesson, a pass is wrong and a take is right
 
 ```backgammon
-(def st (tui-make (Random sw 1) 'white))
+(def st (tui-make (Random sw 1) 'white (opponent-engine)))
 (tui-lesson! st 7)
 (tui-key! st 'escape)
 (def tu-choices (spec-view st 'choices))
@@ -103,7 +103,7 @@ last is a double to take or pass.
 ### after the last lesson a game starts
 
 ```backgammon
-(def st (tui-make (Random sw 1) 'white))
+(def st (tui-make (Random sw 1) 'white (opponent-engine)))
 (tui-lesson! st 7)
 (spec-keys! st (list 'escape "n"))
 (write (list (spec-view st 'lesson) (spec-note st) (game-cube (tui-game st))))
