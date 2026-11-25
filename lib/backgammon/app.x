@@ -118,12 +118,13 @@
             (self st screen reader)))
       (#t (do (%act! st (%wait-key st screen reader)) (self st screen reader))))))
 
-; Play on the terminal, the dice from RND, the people playing HUMAN, the
-; command START run first when it is not "": the exit status.
+; Play on the terminal, the dice from RND, the people playing HUMAN and
+; the opponent OPP the other sides, the command START run first when it
+; is not "": the exit status.
 (def app-run
-  (fn (_ rnd human start)
+  (fn (_ rnd human start opp)
     (def size (Term window 0))
-    (def st (tui-make rnd human))
+    (def st (tui-make rnd human opp))
     (unless (str=? start "") (tui-command! st start))
     (def screen (Screen make (rest size) (first size)))
     (def token (Term raw! 0))

@@ -35,7 +35,8 @@
 (import x/core/doors int+ int- int* int/ int% int< int= io-display-to-str str-byte-len str-byte-ref str-byte-sub)
 (import backgammon/board WHITE BLACK BAR pos-me pos-opp pos-turn pos-me-off pos-opp-off pos-me-pips pos-opp-pips
   step-die play-text play-find play-after play-next play-done)
-(import backgammon/eval eval-ranked eval-best eval-contact?)
+(import backgammon/eval eval-ranked eval-contact?)
+(import backgammon/opponent opponent-play opponent-double? opponent-take? opponent-note!)
 (import backgammon/bearoff bearoff-due? bearoff-solve!)
 (import backgammon/coach coach-judge)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-set-dice!
@@ -59,8 +60,9 @@
 ; what has happened since it was last asked, for a window to show: see
 ; tui-events!; the coach's word, whether it is on, and the hint shown;
 ; and in the tutorial the lesson's index, else (), whether its card is
-; shown, and whether it has been answered right; and the session's games
-; done with, oldest first, for a .mat file.
+; shown, and whether it has been answered right; the session's games
+; done with, oldest first, for a .mat file; and the opponent playing the
+; sides the people do not.
 
 (def %game 0)
 (def %rnd 1)
@@ -87,6 +89,7 @@
 (def %card 22)
 (def %learned 23)
 (def %games 24)
+(def %opp 25)
 
 (def %get (fn (_ st i) (Vector ref i st)))
 (def %put! (fn (_ st i v) (Vector set! i v st)))
@@ -135,10 +138,11 @@
     (%roll-event! st)))
 
 ; The board interface's state, the dice from RND, the people playing
-; HUMAN: white, black, both or none.
+; HUMAN: white, black, both or none; the opponent OPP the other sides.
 (def tui-make
-  (fn (_ rnd human)
-    (def st (Vector make 25 ()))
+  (fn (_ rnd human opp)
+    (def st (Vector make 26 ()))
+    (%put! st %opp opp)
     (%put! st %rnd rnd)
     (%put! st %human human)
     (%put! st %view (if (eq? human (lit black)) BLACK WHITE))
@@ -441,18 +445,20 @@
       ((null? (%get st %done)) (int< (List length (game-plays g)) 2))
       (#t #f))))
 
-; What comes next done for the side it falls to: the engine's take or
-; pass, its double or roll, its play; or the only play there is.
+; What comes next done for the side it falls to: the opponent's take or
+; pass, its double or roll, its play, its note shown after; or the only
+; play there is.
 (def tui-auto-play!
   (fn (_ st)
     (def g (%get st %game))
-    (def d (game-dice g))
+    (def o (%get st %opp))
     (match
-      ((game-offered? g) (if (cube-take? g) (%take! st) (%pass! st)))
-      ((game-to-roll? g) (if (cube-double? g) (%double! st) (%roll! st)))
+      ((game-offered? g) (if (opponent-take? o g) (%take! st) (%pass! st)))
+      ((game-to-roll? g) (if (opponent-double? o g) (%double! st) (%roll! st)))
       ((%human? st (game-turn g))
         ((fn (_ pl) (%commit! st pl (if (null? (first pl)) "cannot move" "had to play") #f)) (first (game-plays g))))
-      (#t (%commit! st (eval-best (game-pos g) (first d) (%2nd d)) "played" #f)))))
+      (#t (%commit! st (opponent-play o g) "played" #f)))
+    ((fn (_ n) (unless (null? n) (%put! st %msg n))) (opponent-note! o))))
 
 ; The bear-off is solved once on a machine, when a game first gets to a
 ; race: due while there is no table and the sides are past each other.

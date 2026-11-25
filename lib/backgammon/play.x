@@ -8,8 +8,8 @@
 ;
 ; The dice are rolled for each turn.  A play is typed the way it is
 ; written, 24/18 13/11; anything else is a command, `help` lists them.
-; The engine plays the sides no one else does, and a roll with only one
-; play is played without asking.
+; The opponent, the engine or gnubg, plays the sides no one else does,
+; and a roll with only one play is played without asking.
 ;
 ; IO is (read say): read takes the prompt and answers the line, or ()
 ; at the end of the input; say writes text.
@@ -20,7 +20,8 @@
 (import x/sys/gc)
 (import x/core/doors int+ int- int* int< int= io-display-to-str str-byte-len str-byte-ref str-byte-sub)
 (import backgammon/board WHITE BLACK pos-turn pos-me-pips pos-opp-pips play-text play-find)
-(import backgammon/eval eval-ranked eval-best eval-contact?)
+(import backgammon/eval eval-ranked eval-contact?)
+(import backgammon/opponent opponent-play opponent-double? opponent-take? opponent-note!)
 (import backgammon/bearoff bearoff-due? bearoff-solve!)
 (import backgammon/cube cube-double? cube-take?)
 (import backgammon/game game-new game-pos game-dice game-result game-over? game-turn game-throw
@@ -54,12 +55,13 @@
           "")))
 
 ; The session: a Vector of the game, the dice's source, who the people
-; play, white, black, both or none, and the games done with, oldest
-; first.
+; play, white, black, both or none, the games done with, oldest first,
+; and the opponent playing the other sides.
 (def %s-game 0)
 (def %s-rnd 1)
 (def %s-human 2)
 (def %s-games 3)
+(def %s-opp 4)
 
 (def %get (fn (_ st i) (Vector ref i st)))
 (def %put! (fn (_ st i v) (Vector set! i v st)))
@@ -220,15 +222,21 @@
       ((if (%starts? line "xgid ") #t (%starts? line "save ")) (%command io st line))
       (#t (do (%say io (Str8 append (Str8 join " or " (List filter (fn (_ w) (int< 1 (str-byte-len w))) words)) "\n")) #t)))))
 
+; The opponent's CHOICE of G, its note said first when it has one.
+(def %opp-choice
+  (fn (_ io st choice g)
+    (def o (%get st %s-opp))
+    ((fn (_ r) ((fn (_ n) (unless (null? n) (%say io (Str8 append n "\n")))) (opponent-note! o)) r) (choice o g))))
+
 ; One step while the cube waits: the answer to a double, or the choice
-; to roll or double; the engine's, or read from a person.
+; to roll or double; the opponent's, or read from a person.
 (def %cube-step
   (fn (_ io st)
     (def g (%get st %s-game))
     (def cube (io-display-to-str (int* 2 (game-cube g))))
     (if (game-offered? g)
       (if (not (%human? st (int- 1 (game-turn g))))
-        (do (if (cube-take? g) (%take! io g) (%pass! io g)) #t)
+        (do (if (%opp-choice io st opponent-take? g) (%take! io g) (%pass! io g)) #t)
         ((fn (_ line)
            (if (null? line) #f
              (%cube-line io st (%trim line) (list "take" "t" "pass" "p" "drop")
@@ -236,7 +244,7 @@
                (if (cube-take? g) "take" "pass"))))
          (%read io (Str8 append (%name (game-turn g)) " doubles to " cube ".  " (%name (int- 1 (game-turn g))) ": take or pass> "))))
       (if (not (%human? st (game-turn g)))
-        (do (if (cube-double? g) (%double! io g) (game-roll! g)) #t)
+        (do (if (%opp-choice io st opponent-double? g) (%double! io g) (game-roll! g)) #t)
         ((fn (_ line)
            (if (null? line) #f
              (%cube-line io st (%trim line) (list "roll" "r" "" "double" "d")
@@ -265,7 +273,7 @@
       ((if (game-offered? g) #t (game-to-roll? g)) (%cube-step io st))
       ((not (%human? st (game-turn g)))
         (do (%say io (Str8 append (%name (game-turn g)) " rolls " (%dice-text (game-dice g)) ".\n"))
-            (%play! io st (eval-best (game-pos g) (first (game-dice g)) (first (rest (game-dice g)))) "plays")
+            (%play! io st (%opp-choice io st opponent-play g) "plays")
             #t))
       ((int= (List length (game-plays g)) 1)
         (do (%say io (Str8 append (%name (game-turn g)) " rolls " (%dice-text (game-dice g)) ".\n"))
@@ -340,11 +348,12 @@
 ; The session ST played until it is over: the exit status.
 (def %session (fn (_ io st) ((fn (self) (when (%step io st) (self)))) 0))
 
-; A session on IO with the dice from RND, the people playing HUMAN; START,
-; when not "", a command run first, as "tutorial" or "xgid ID".
+; A session on IO with the dice from RND, the people playing HUMAN and
+; the opponent OPP the other sides; START, when not "", a command run
+; first, as "tutorial" or "xgid ID".
 (def play-run
-  (fn (_ io rnd human start)
-    (def st (Vector of () rnd human ()))
+  (fn (_ io rnd human start opp)
+    (def st (Vector of () rnd human () opp))
     (if (str=? start "") (do (%new-game! io st) (%session io st))
       (do (%put! st %s-game (game-new rnd))
           (if (%command io st start) (%session io st) 0)))))

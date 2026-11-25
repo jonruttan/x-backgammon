@@ -287,14 +287,15 @@
       (#t (do (%collect! w now) (Sys usleep 8000) (self w))))))
 
 ; Play in a window drawn through FRONT, Sdl or Web, the dice from RND,
-; the people playing HUMAN, the command START run first when it is not
-; "": () when it was left, or what went wrong.
+; the people playing HUMAN and the opponent OPP the other sides, the
+; command START run first when it is not "": () when it was left, or
+; what went wrong.
 (def window-run
-  (fn (_ front rnd human start)
+  (fn (_ front rnd human start opp)
     (when (eq? front Sdl) (Sdl hint! "SDL_VIDEO_MAC_FULLSCREEN_SPACES" "0"))
     (def w (Vector make %slots ()))
     (%put! w %front front)
-    (%put! w %st ((fn (_ st) (unless (str=? start "") (tui-command! st start)) st) (tui-make rnd human)))
+    (%put! w %st ((fn (_ st) (unless (str=? start "") (tui-command! st start)) st) (tui-make rnd human opp)))
     (%put! w %gui (gui-make))
     (%put! w %dirty #t)
     (%put! w %drawn 0)

@@ -12,6 +12,7 @@ x -l backgammon -- play --side black --seed 7
 x -l backgammon -- play --window
 x -l backgammon -- play --tutorial
 x -l backgammon -- play --xgid XGID=-b----E-C---eE---c-e----B-:0:0:1:00:0:0:0:0:6
+x -l backgammon -- play --gnubg 127.0.0.1:4321
 x -l backgammon -- --board
 x -l backgammon -- --roll 31
 x -l backgammon -- --perft 1
@@ -22,8 +23,9 @@ terminal, or in a window with `--window` or `--web` (below).  `--side`
 is the side you play, white (the default), black, both, or none to
 watch the engine play itself.  The dice are drawn from a seed, printed
 at the start when `--seed N` does not give one, so a game can be
-played again.  `--tutorial` starts with the lessons, and `--xgid ID`
-from a position (both below).
+played again.  `--tutorial` starts with the lessons, `--xgid ID` from
+a position, and `--gnubg ADDRESS` has GNU Backgammon play in place of
+the engine (all below).
 `--board` prints the starting board.  `--roll DD` prints every legal
 play of the roll from the start, one a line, and how many on standard
 error.  `--perft N` counts the plays over N turns, each of the 21 rolls
@@ -218,6 +220,23 @@ machine, the first time a game gets to a race, which takes about a
 minute and says so, and is kept in `$XDG_CACHE_HOME/x-backgammon/`
 (`~/.cache/x-backgammon/` without it).  Until then a race is counted in
 pips.
+
+## Playing GNU Backgammon
+
+`--gnubg ADDRESS` has GNU Backgammon play the sides you do not, in
+place of the engine, on the board, in a window or a line at a time.
+It runs on its own and is not part of the bundle: started with `gnubg
+-t`, the command `external :PORT` has it listen on PORT as an external
+player, and the address is `HOST:PORT`, `:PORT` or `PORT` (the host
+127.0.0.1 when none is given).  Each choice is asked of it as a FIBS
+board line, and it answers its play, whether to double, or whether to
+take; how strongly it plays is its own setting.  Hints, the coach and
+the lessons are still the engine's.
+
+When nothing answers at the address, or what answers is not gnubg,
+`play` stops with a message.  When gnubg stops answering in a game, or
+answers what is not a choice of the position, the engine makes that
+choice and the message says so.
 
 ## The rules played
 
