@@ -130,10 +130,11 @@
 ; A stand-in for gnubg's external player on this machine.  It answers
 ; gnubg's version lines and then REPLIES, a line each, all written before
 ; the client asks, as one process cannot answer while it waits; it is
-; closed after when CLOSE is #t.  (OPP . PEER): the opponent over it, and
-; the stand-in's end, to read what it was asked.
+; closed after when CLOSE is #t.  (OPP . PEER): the opponent over it, its
+; reads waiting a second, and the stand-in's end, to read what it was
+; asked.  A stand-in left open with no reply to give does not answer.
 (import x/sys/socket)
-(import backgammon/gnubg gnubg-board gnubg-play-text gnubg-on gnubg-opponent)
+(import backgammon/gnubg GNUBG-WAIT gnubg-board gnubg-play-text gnubg-on gnubg-opponent)
 (import x/core/doors io-display-to-str)
 
 (def spec-stand-in
@@ -146,7 +147,7 @@
       (Str8 join "" (List map (fn (_ r) (Str8 append r "\n"))
                       (List append (list "Interface: 2" "RFBF: 0" "Engine: 1.01" "Software: stand-in") replies))))
     (when close (Socket close peer))
-    (pair (gnubg-on fd) peer)))
+    (pair (gnubg-on fd 1000) peer)))
 
 ; What the stand-in at PEER was asked, the lines as one string.
 (def spec-asked (fn (_ peer) ((fn (_ s) (if (null? s) "" s)) (Socket recv peer 65536))))

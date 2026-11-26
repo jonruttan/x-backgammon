@@ -23,14 +23,16 @@
 ; other side's down; place 25 is its bar and place 0 the other's.  A game
 ; is a money game, of match length 0.
 ;
-; When gnubg cannot be reached, or answers what is not a choice of the
-; position, the engine makes that choice, and the opponent's note says so.
+; When gnubg cannot be reached, gives no answer in GNUBG-WAIT, or answers
+; what is not a choice of the position, the engine makes that choice, and
+; the opponent's note says so.
 
 (module backgammon/gnubg)
 
 (import x/type/vector)
 (import x/sys/socket)
-(import x/core/doors int+ int- int< int= io-display-to-str str-byte-len str-byte-ref str-byte-sub)
+(import x/sys/posix)
+(import x/core/doors int+ int- int* int/ int< int= io-display-to-str str-byte-len str-byte-ref str-byte-sub)
 (import backgammon/board BAR pos-me pos-opp pos-me-off pos-opp-off play-find)
 (import backgammon/game game-pos game-dice game-cube game-turn game-offered? game-may-double?)
 (import backgammon/opponent opponent-make opponent-engine opponent-play opponent-double? opponent-take?)
@@ -79,39 +81,75 @@
 ; --- the connection -----------------------------------------------------------------
 ;
 ; A connection is a Vector of the socket, the bytes read past the last
-; line, whether it has failed, and the note waiting.
+; line, whether it has failed, the note waiting, the milliseconds a read
+; waits for bytes, and whether the last read ran out of that time.
 
 (def %c-fd 0)
 (def %c-rest 1)
 (def %c-failed 2)
 (def %c-note 3)
+(def %c-wait 4)
+(def %c-late 5)
+
+; How long gnubg is waited for, each time bytes are read: 60 seconds.
+(def GNUBG-WAIT 60000)
 
 (def %get (fn (_ c i) (Vector ref i c)))
 (def %put! (fn (_ c i v) (Vector set! i v c)))
 
+; The milliseconds since the clock read START, (SECONDS . MICROSECONDS).
+(def %since
+  (fn (_ start)
+    ((fn (_ now) (int+ (int* (int- (first now) (first start)) 1000) (int/ (int- (rest now) (rest start)) 1000)))
+     (Sys time-of-day))))
+
+; #t once C's socket has bytes to read, #f when C's wait passes first.  A
+; signal ends a poll early, so it is asked again for the time left.
+(def %ready?
+  (fn (_ c)
+    (def start (Sys time-of-day))
+    ((fn (self)
+       ((fn (_ left)
+          (match ((int< left 1) #f)
+                 ((null? (Sys poll (list (pair (%get c %c-fd) (list (lit in)))) left)) (self))
+                 (#t #t)))
+        (int- (%get c %c-wait) (%since start)))))))
+
 ; The next line from C, without its newline.  Raises at the end of the
-; input.
+; input, and when no bytes come in C's wait.
 (def %read-line
   (fn (self c)
     (def s (%get c %c-rest))
     (def i (Str8 index-of "\n" s))
     (if (null? i)
-      ((fn (_ more)
-         (when (null? more) (Err raise (lit io) "gnubg closed the connection" ()))
-         (%put! c %c-rest (Str8 append s more))
-         (self c))
-       (Socket recv (%get c %c-fd) 4096))
+      (do (unless (%ready? c)
+            (%put! c %c-late #t)
+            (Err raise (lit io) "gnubg did not answer in time" ()))
+          ((fn (_ more)
+             (when (null? more) (Err raise (lit io) "gnubg closed the connection" ()))
+             (%put! c %c-rest (Str8 append s more))
+             (self c))
+           (Socket recv (%get c %c-fd) 4096)))
       (do (%put! c %c-rest (str-byte-sub s (int+ i 1) (int- (str-byte-len s) (int+ i 1))))
           (str-byte-sub s 0 i)))))
 
+; C's wait as text, "60 seconds" or "1 second".
+(def %wait-text
+  (fn (_ c) ((fn (_ s) (Str8 append (%n s) (if (int= s 1) " second" " seconds"))) (int/ (%get c %c-wait) 1000))))
+
 ; LINE sent on C and the line answered, or () when the connection fails.
+; A late answer would be taken for the next one, so after a read runs out
+; of time the connection is not asked again.
 (def %ask
   (fn (_ c line)
     (if (%get c %c-failed) ()
       ((fn (_ r)
          (when (null? r)
            (%put! c %c-failed #t)
-           (%put! c %c-note "gnubg stopped answering: the engine plays on."))
+           (%put! c %c-note
+             (if (%get c %c-late)
+               (Str8 append "gnubg gave no answer in " (%wait-text c) ": the engine plays on.")
+               "gnubg stopped answering: the engine plays on.")))
          r)
        (guard (e ()) (do (Socket send (%get c %c-fd) (Str8 append line "\n")) (%read-line c)))))))
 
@@ -176,16 +214,18 @@
             (guard (e ()) (%read-line c)))))
        3))))
 
-; The opponent gnubg plays over the connected socket FD, or () when what
-; answers there is not gnubg's external player, the socket then closed.
+; The opponent gnubg plays over the connected socket FD, each read
+; waiting WAIT milliseconds for it, or () when what answers there is not
+; gnubg's external player, or does not answer in time, the socket then
+; closed.
 (def gnubg-on
-  (fn (_ fd)
+  (fn (_ fd wait)
     ((fn (_ c)
        ((fn (_ v)
           (if (null? v) (do (guard (e ()) (Socket close fd)) ())
             (%opponent c (Str8 append "gnubg " v))))
         (%version c)))
-     (Vector of fd "" #f ()))))
+     (Vector of fd "" #f () wait #f))))
 
 ; The opponent gnubg plays, listening at ADDRESS, or a string saying why
 ; it cannot be.
@@ -198,8 +238,8 @@
          ((fn (_ fd)
             (if (null? fd)
               (Str8 append "nothing answers at " where ": is gnubg listening, told `external :" (%n (first (rest hp))) "`?")
-              ((fn (_ o) (if (null? o) (Str8 append where " does not answer as gnubg's external player") o)) (gnubg-on fd))))
+              ((fn (_ o) (if (null? o) (Str8 append where " does not answer as gnubg's external player") o)) (gnubg-on fd GNUBG-WAIT))))
           (if (null? host) () (guard (e ()) (Socket tcp-connect host (first (rest hp)))))))
        (guard (e ()) (Socket resolve (first hp)))))))
 
-(provide backgammon/gnubg gnubg-board gnubg-play-text gnubg-on gnubg-opponent)
+(provide backgammon/gnubg GNUBG-WAIT gnubg-board gnubg-play-text gnubg-on gnubg-opponent)

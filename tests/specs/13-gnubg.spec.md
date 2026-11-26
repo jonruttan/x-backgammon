@@ -95,6 +95,24 @@ answers as it does.
     ("13/11 8/2" "gnubg stopped answering: the engine plays on." #f ())
 
 
+### silent: after its wait the engine plays, and it is not asked again
+
+```backgammon
+(def gb-s (spec-stand-in () #f))
+(def gb-o (first gb-s))
+(def gb-g (game-at (pos-start) (list 6 2) (Random sw 1)))
+(def gb-a (play-text (opponent-play gb-o gb-g)))
+(def gb-n (opponent-note! gb-o))
+(def gb-t (Sys time-of-day))
+(def gb-b (opponent-double? gb-o (game-at (pos-start) () (Random sw 1))))
+(def gb-quick (< (- (first (Sys time-of-day)) (first gb-t)) 1))
+(write (list gb-a gb-n gb-b gb-quick
+             (str=? (spec-asked (rest gb-s)) (Str8 append "version\n" (gnubg-board gb-g) "\n"))))
+```
+---
+    ("13/11 8/2" "gnubg gave no answer in 1 second: the engine plays on." #f #t #t)
+
+
 ### on the board, the stand-in plays white and its play is shown
 
 ```backgammon
@@ -111,7 +129,7 @@ answers as it does.
 
 ## Reaching it
 
-### nothing listening, a bad address, and what is not gnubg
+### nothing listening, a bad address, what is not gnubg, and what is silent
 
 ```backgammon
 (def gb-p (spec-free-address))
@@ -119,9 +137,13 @@ answers as it does.
 (def gb-fd (Socket tcp-connect "127.0.0.1" (Socket local-port gb-l)))
 (def gb-peer (Socket accept gb-l))
 (Socket send gb-peer "hello\n")
+(def gb-fd2 (Socket tcp-connect "127.0.0.1" (Socket local-port gb-l)))
+(def gb-peer2 (Socket accept gb-l))
 (write (list (spec-has? "nothing answers at 127.0.0.1:" (gnubg-opponent gb-p))
              (gnubg-opponent "host:port")
-             (gnubg-on gb-fd)))
+             (gnubg-on gb-fd 1000)
+             (gnubg-on gb-fd2 200)
+             GNUBG-WAIT))
 ```
 ---
-    (#t "the address is HOST:PORT, :PORT or PORT" ())
+    (#t "the address is HOST:PORT, :PORT or PORT" () () 60000)
