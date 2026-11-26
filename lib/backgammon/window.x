@@ -302,6 +302,9 @@
     (%put! w %quiet 0)
     (%put! w %collected 0)
     (%put! w %win (front scaling! (front open "x-backgammon" (gui-width) (gui-height) 1) (lit fit)))
+    ; a window opened from a terminal leaves the keyboard with the
+    ; terminal; a browser tab's focus is the browser's to give
+    (when (eq? front Sdl) (Sdl raise! (%get w %win)))
     (%put! w %sound (sound-make front))
     (def failed (guard (e e) (do (%loop w) ())))
     (sound-close! (%get w %sound))
