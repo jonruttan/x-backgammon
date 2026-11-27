@@ -139,11 +139,21 @@ answers as it does.
 (Socket send gb-peer "hello\n")
 (def gb-fd2 (Socket tcp-connect "127.0.0.1" (Socket local-port gb-l)))
 (def gb-peer2 (Socket accept gb-l))
-(write (list (spec-has? "nothing answers at 127.0.0.1:" (gnubg-opponent gb-p))
-             (gnubg-opponent "host:port")
+(write (list (spec-has? "nothing answers at 127.0.0.1:" (gnubg-opponent gb-p GNUBG-WAIT))
+             (gnubg-opponent "host:port" GNUBG-WAIT)
              (gnubg-on gb-fd 1000)
              (gnubg-on gb-fd2 200)
              GNUBG-WAIT))
 ```
 ---
     (#t "the address is HOST:PORT, :PORT or PORT" () () 60000)
+
+### a wait that is not a number of seconds, 1 or more, stops play
+
+```backgammon
+(def gb-q (spec-free-address))
+(write (List map (fn (_ w) (backgammon-main (list "play" "--gnubg" gb-q "--gnubg-wait" w)))
+                 (list "0" "-3" "ten")))
+```
+---
+    (2 2 2)

@@ -23,7 +23,7 @@
 ; other side's down; place 25 is its bar and place 0 the other's.  A game
 ; is a money game, of match length 0.
 ;
-; When gnubg cannot be reached, gives no answer in GNUBG-WAIT, or answers
+; When gnubg cannot be reached, gives no answer in the wait, or answers
 ; what is not a choice of the position, the engine makes that choice, and
 ; the opponent's note says so.
 
@@ -91,7 +91,9 @@
 (def %c-wait 4)
 (def %c-late 5)
 
-; How long gnubg is waited for, each time bytes are read: 60 seconds.
+; How long gnubg is waited for, each time bytes are read, when no wait is
+; given: 60 seconds.  Five games of gnubg against itself at its default
+; strength, on an Apple M2 Pro, gave 377 answers, the slowest in 726 ms.
 (def GNUBG-WAIT 60000)
 
 (def %get (fn (_ c i) (Vector ref i c)))
@@ -227,10 +229,11 @@
         (%version c)))
      (Vector of fd "" #f () wait #f))))
 
-; The opponent gnubg plays, listening at ADDRESS, or a string saying why
+; The opponent gnubg plays, listening at ADDRESS and waited for WAIT
+; milliseconds each time bytes are read, or a string saying why
 ; it cannot be.
 (def gnubg-opponent
-  (fn (_ address)
+  (fn (_ address wait)
     (def hp (%address address))
     (def where (if (null? hp) "" (Str8 append (first hp) ":" (%n (first (rest hp))))))
     (if (null? hp) "the address is HOST:PORT, :PORT or PORT"
@@ -238,7 +241,7 @@
          ((fn (_ fd)
             (if (null? fd)
               (Str8 append "nothing answers at " where ": is gnubg listening, told `external :" (%n (first (rest hp))) "`?")
-              ((fn (_ o) (if (null? o) (Str8 append where " does not answer as gnubg's external player") o)) (gnubg-on fd GNUBG-WAIT))))
+              ((fn (_ o) (if (null? o) (Str8 append where " does not answer as gnubg's external player") o)) (gnubg-on fd wait))))
           (if (null? host) () (guard (e ()) (Socket tcp-connect host (first (rest hp)))))))
        (guard (e ()) (Socket resolve (first hp)))))))
 
