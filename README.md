@@ -221,6 +221,18 @@ minute and says so, and is kept in `$XDG_CACHE_HOME/x-backgammon/`
 (`~/.cache/x-backgammon/` without it).  Until then a race is counted in
 pips.
 
+The chance of winning a match at each score is Neil Kazaross's XG2
+table, as GNU Backgammon ships it (`met/Kazaross-XG2.xml` in gnubg-data
+1.08.003): rolled out by eXtreme Gammon to 9 points and extended to 25.
+`backgammon/met-convert` turns gnubg's XML into the module
+`backgammon/met-xg2`, the table's notice kept with it; the XML is in
+`tests/fixtures/`, and a spec converts it again and compares.  To write
+the module again, from the bundle's directory:
+
+```sh
+x -f tools/met-convert.x -- tests/fixtures/Kazaross-XG2.xml lib/backgammon/met-xg2.x
+```
+
 ## Playing GNU Backgammon
 
 `--gnubg ADDRESS` has GNU Backgammon play the sides you do not, in
