@@ -234,11 +234,14 @@ take; how strongly it plays is its own setting.  Hints, the coach and
 the lessons are still the engine's.
 
 When nothing answers at the address, or what answers is not gnubg,
-`play` stops with a message.  gnubg is waited for 60 seconds an answer;
-when it stops answering in a game, gives no answer in that time, or
-answers what is not a choice of the position, the engine makes that
-choice and the message says so.  After a wait runs out gnubg is not
-asked again, and the engine plays the rest of the session.
+`play` stops with a message.  gnubg is waited for an answer the
+seconds `--gnubg-wait SECONDS` gives, 60 when it is not given; five
+games of gnubg against itself at its default strength, on an Apple M2
+Pro, gave 377 answers, the slowest in 0.73 seconds.  When gnubg stops
+answering in a game, gives no answer in the wait, or answers what is
+not a choice of the position, the engine makes that choice and the
+message says so.  After a wait runs out gnubg is not asked again, and
+the engine plays the rest of the session.
 
 ## The rules played
 

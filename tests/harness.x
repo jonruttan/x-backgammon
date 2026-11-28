@@ -136,6 +136,7 @@
 (import x/sys/socket)
 (import backgammon/gnubg GNUBG-WAIT gnubg-board gnubg-play-text gnubg-on gnubg-opponent)
 (import x/core/doors io-display-to-str)
+(import backgammon/cli backgammon-main)
 
 (def spec-stand-in
   (fn (_ replies close)
