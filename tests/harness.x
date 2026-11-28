@@ -156,3 +156,19 @@
 ; An address on this machine nothing listens at, ":PORT".
 (def spec-free-address
   (fn (_) ((fn (_ l) ((fn (_ p) (Socket close l) (Str8 append ":" (io-display-to-str p))) (Socket local-port l))) (Socket tcp-listen-on "127.0.0.1" 0))))
+
+; --- the match equity table ---------------------------------------------------
+;
+; The bundle's directory, found from where backgammon/met-convert was
+; loaded, so a spec reads the fixture and the shipped table wherever the
+; suite runs from.
+(import x/sys/file)
+(import x/core/doors str-byte-len str-byte-sub)
+(import backgammon/met-convert met-convert)
+(import backgammon/met MET-NAME MET-LENGTH met-equity met-post-crawford)
+
+(def spec-bundle-file
+  (fn (_ rel)
+    (def lib (%module-resolve (lit backgammon/met-convert)))
+    (def tail "lib/backgammon/met-convert.x")
+    (Str8 append (str-byte-sub lib 0 (- (str-byte-len lib) (str-byte-len tail))) rel)))
